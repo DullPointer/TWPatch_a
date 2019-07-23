@@ -127,20 +127,8 @@ MOV r2, #0x1F
 LSL r2, #24
 ADD r0, r2
 
-MOV r2, #0x2D
-LSL r2, #12
+LDR r2, =0x2D000 + 0xCA80 + (0xF0 * 3)
 ADD r0, r2
-
-;this block might cause crash
-;no crash, but no video
-MOV r2, #0xCA
-LSL r2, #1
-ADD r2, #1
-LSL r2, #7
-ADD r0, r2
-SUB r0, #0xF0
-SUB r0, #0xF0
-SUB r0, #0xF0
 
 MOV r2, #0
 MOV r3, #0
@@ -153,11 +141,11 @@ LDRH r1, [r4]
 BL draw_hex
 ADD r4, #2
 ADD r5, #2
-CMP r5, #0x14
+CMP r5, #0x10
 BNE print_again
 
 
-;SUB r0, #0x20
+SUB r0, #0x20
 
 ;0x1EC47100 2
 ;0x1EC47110 1
