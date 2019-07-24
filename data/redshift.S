@@ -2,18 +2,26 @@
 .thumb
 .create outfile,0
 
-MOV r1, r0
+MOV r0, LR
 B payload
 
 .include "../test.S"
 
 .func payload
-    PUSH {r0, r1}
+    PUSH {r0, r2}
     LDR r1, =0x1EF00480
-    ADD r0, PC, dec_t - . - 4
+    ADD r0, PC, (dec_t - . - 2) & ~3
     BL ct_dec
-    POP {r0, r1}
-    BX r0
+    MOV r1, r0
+    POP {r0, r2}
+    MOV LR, r0
+    ADD r2, PC, (dec_t - . - 2) & ~3
+    ADD r1, #31
+    LSR r1, #5
+    LSL r1, #2
+    ADD r2, r1
+    ADD r2, #1
+    BX r2
 
 
 .align	4
@@ -21,6 +29,4 @@ B payload
 
 .align 4
 dec_t:
-    .word 0xC0FF1000
-    .word 0xC0CFAFEE
 .close

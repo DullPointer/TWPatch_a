@@ -1,7 +1,8 @@
 .thumb
-ct_dec:
+.func ct_dec
+    mov r3, r8
+	push	{r2, r3, r4, r5, r6, r7}
 	mov	r3, #0
-	push	{r4, r5, r6, r7, lr}
 	mov	r4, r1
 	sub	sp, sp, #20
 	mov	r5, #128
@@ -25,16 +26,16 @@ ct_dec:
 	str	r4, [sp, #8]
 	mov	r4, #31
 	and	r4, r3
-	mov	r12, r4
+	mov	r8, r4
 	mov	r4, r7
-	mov	r6, r12
+	mov	r6, r8
 	lsl	r4, r6
-	mov	r12, r4
+	mov	r8, r4
 	ldr	r6, [sp, #8]
 	ldr	r4, [sp, #4]
 	add	r3, r3, #1
 	ldr	r6, [r6, r4]
-	mov	r4, r12
+	mov	r4, r8
 	tst	r6, r4
 	beq	.L9
 	ldr	r4, [sp]
@@ -52,4 +53,7 @@ ct_dec:
 	bne	.L2
 	add	sp, sp, #20
 	;@ sp needed
-	pop	{r4, r5, r6, r7, pc}
+    mov r0, r3
+	pop	{r2, r3, r4, r5, r6, r7}
+    mov r8, r3
+    bx lr

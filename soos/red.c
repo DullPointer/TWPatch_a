@@ -1,17 +1,12 @@
 #include <math.h>
-
-typedef struct
-{
-	int temperature;
-	float gamma[3];
-	float brightness;
-} color_setting_t;
+#include "red.h"
 
 /* Whitepoint values for temperatures at 100K intervals.
    These will be interpolated for the actual temperature.
    This table was provided by Ingo Thies, 2013. See
    the file README-colorramp for more information. */
-static const float blackbody_color[] = {
+static const float blackbody_color[] =
+{
 	1.00000000,  0.18172716,  0.00000000, /* 1000K */
 	1.00000000,  0.25503671,  0.00000000, /* 1100K */
 	1.00000000,  0.30942099,  0.00000000, /* 1200K */

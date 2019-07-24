@@ -133,80 +133,20 @@ ADD r0, r2
 MOV r2, #0
 MOV r3, #0
 
-LDR r4, =0x1EC41100
+LDR r4, =0x1EC41000 + 0x1000
 MOV r5, #0
 
 print_again:
-LDRH r1, [r4]
+SUB r4, #4
+LDR r1, [r4]
 BL draw_hex
-ADD r4, #2
-ADD r5, #2
-CMP r5, #0x10
+ADD r5, #1
+CMP r5, #22
 BNE print_again
 
 
-SUB r0, #0x20
+;SUB r0, #0x20
 
-;0x1EC47100 2
-;0x1EC47110 1
-;0x1EC47111 1
-;0x1EC47120 4
-;0x1EC47124 4
-;0x1EC47130 4
-;0x1EC47134 4
-;0x1EC47140 4
-;0x1EC47150 1
-;0x1EC47151 1
-;0x1EC47160 4
-;0x1EC47164 4
-
-LDR r4, =0x1EC47100
-LDRH r1, [r4]
-BL draw_hex
-
-ADD r4, #0x10 ; 10h
-LDRB r1, [r4]
-BL draw_hex
-
-ADD r4, #0x01 ; 11h
-LDRB r1, [r4]
-BL draw_hex
-
-ADD r4, #0x0F ; 20h
-LDR r1, [r4]
-BL draw_hex
-
-ADD r4, #0x04 ; 24h
-LDR r1, [r4]
-BL draw_hex
-
-ADD r4, #0x0C ; 30h
-LDR r1, [r4]
-BL draw_hex
-
-ADD r4, #0x04 ; 34h
-LDR r1, [r4]
-BL draw_hex
-
-ADD r4, #0x0C ; 40h
-LDR r1, [r4]
-BL draw_hex
-
-ADD r4, #0x10 ; 50h
-LDRB r1, [r4]
-BL draw_hex
-
-ADD r4, #0x01 ; 51h
-LDRB r1, [r4]
-BL draw_hex
-
-ADD r4, #0x0F ; 60h
-LDR r1, [r4]
-BL draw_hex
-
-ADD r4, #0x04 ; 64h
-LDR r1, [r4]
-BL draw_hex
 
 
 MOV r1, r4
@@ -246,6 +186,7 @@ skip_fbswap:
 
 hole_end:
 
+/*
 ; fix LR
 
 MOV r0, LR
@@ -258,6 +199,7 @@ MOV r0, LR
 ; only fix LR when running in 300000h region
 ADD r0, #4
 MOV LR, r0
+*/
 
 B payload_end
 

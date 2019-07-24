@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-void ct_dec(const uint32_t const* compress_t, volatile uint32_t* addr)
+uint32_t ct_dec(const uint32_t const* compress_t, volatile uint32_t* addr)
 {
     uint32_t i = 0;
     uint32_t j = 0;
@@ -12,7 +12,7 @@ void ct_dec(const uint32_t const* compress_t, volatile uint32_t* addr)
     
     for(i = 0; i < 0x100; i++)
     {
-        for(j = 0; j < 4; j++)
+        for(j = 0; j < 3; j++)
         {
             while(compress_t[compress_o >> 5] & (1 << (compress_o & 31)))
             {
@@ -26,4 +26,6 @@ void ct_dec(const uint32_t const* compress_t, volatile uint32_t* addr)
         addr[0x01] = prev;
         addr[0x41] = prev;
     }
+    
+    return compress_o;
 }
