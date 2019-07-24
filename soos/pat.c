@@ -169,7 +169,7 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
     }
     */
     
-    if((mask & PAT_RELOC) && !agbg)
+    if(mask & PAT_RELOC)
     {
         memcpy(tptr, reloc_bin, reloc_bin_size);
         tptr += (reloc_bin_size + 1) >> 1;
@@ -360,46 +360,59 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 *(res2ptr++) = absaddr >> 16;
                 *(res2ptr++) = absaddr >> 24;
                 
-                res2ptr = resptr;
+                res2ptr = resptr; // hole offset
+                resptr = 0;
                 
-                // === DS ONLY find relocation offset
-                if(!agbg && !(~mask & (PAT_RELOC | PAT_HOLE))) //don't relocate if PAT_HOLE is not set
+                // === find relocation offset offset
+                if(!(~mask & (PAT_RELOC | PAT_HOLE))) //don't relocate if PAT_HOLE is not set
+                {
+                    //this works on both AGBG and TwlBg
                     resptr = memesearch(
                         (const uint8_t[]){0x7F, 0x00, 0x01, 0x00, 0x00, 0x00, 0xF0, 0x1E},
-                        0,
-                        codecptr, codecsize,
-                        8
+                        0, codecptr, codecsize, 8
                     );
-                else
-                    resptr = 0;
+                }
                 
                 // do not clear PAT_RELOC because it's cleared below
                 mask &= ~(pat_copyhole(res2ptr, sets, mask, 0) & ~(PAT_RELOC)); //TODO: check out size
                 
-                if(!agbg && resptr)
+                if(resptr)
                 {
                     // fileoffs + addroffs == vaddr
                     size_t addroffs = 0x400000 - *(uint32_t*)(resptr + 8);
                     
                     // == find dummy error code return function called from MainLoop
                     res2ptr = memesearch(
+                        //same for both AGBG and TwlBg
                         (const uint8_t[]){0x00, 0x48, 0x70, 0x47, 0x00, 0x38, 0x40, 0xC9},
-                        0,
-                        codecptr, codecsize,
-                        8
+                        0, codecptr, codecsize, 8
                     );
                     
                     // == find MainLoop function
-                    resptr = memesearch(
-                        (const uint8_t[]){0x80, 0x71, 0xDF, 0x0F, 0x18, 0x09, 0x12, 0x00},
-                        (const uint8_t[]){0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00},
-                        codecptr, codecsize,
-                        8
-                    );
+                    resptr = !agbg ?
+                        memesearch
+                        (
+                            // ???
+                            (const uint8_t[]){0x80, 0x71, 0xDF, 0x0F, 0x18, 0x09, 0x12, 0x00},
+                            (const uint8_t[]){0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00},
+                            codecptr, codecsize, 8
+                        )
+                    :
+                        memesearch
+                        (
+                            //TODO: relies on magic DCW 0xFFFF
+                            (const uint8_t[]){0xFF, 0xFF, 0x0B, 0x48, 0x10, 0xB5, 0x11, 0xF0},
+                            (const uint8_t[]){0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00},
+                            codecptr, codecsize, 8
+                        )
+                    ;
                     
                     if(res2ptr && resptr)
                     {
-                        resptr += 0x16; // the function is below the consts the memesearch is for
+                        // the function is below the consts the memesearch is for
+                        resptr += 0x10;
+                        if(!agbg)
+                            resptr += 6; // 0x16
                         
                         printf("Frame hook function %X %X %08X\n", res2ptr, res2ptr - codecptr, res2ptr-codecptr+addroffs);
                         printf("Frame hook patch    %X %X %08X\n", resptr, resptr - codecptr, resptr-codecptr+addroffs);
@@ -457,7 +470,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         }
                     }
                 }
-                else if(!agbg)
+                else
                 {
                     puts("Can't relocate frame hook");
                 }

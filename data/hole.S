@@ -133,13 +133,13 @@ ADD r0, r2
 MOV r2, #0
 MOV r3, #0
 
-LDR r4, =0x1EC41000 + 0x1000
+LDR r4, =0x1EC41000 + 0x100
 MOV r5, #0
 
 print_again:
-SUB r4, #4
 LDR r1, [r4]
 BL draw_hex
+ADD r4, #4
 ADD r5, #1
 CMP r5, #22
 BNE print_again
