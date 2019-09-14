@@ -12,7 +12,7 @@ typedef uint32_t u32;
 #include "agb_wide_bin.h"
 #include "twl_wide_bin.h"
 
-const size_t PAT_HOLE_SIZE = 0x1E0; // actually 0x1E8, but unsafe
+const size_t PAT_HOLE_SIZE = 0x1E0; // actually 0x1E8, but can't trust the user
 
 extern int agbg;
 
@@ -91,10 +91,14 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
     
     if((mask & PAT_REDSHIFT) && sets)
     {
+        // copy Redshift decompressor code
         memcpy(tptr, redshift_bin, redshift_bin_size);
         tptr += (redshift_bin_size + 1) >> 1;
         
+        // there is an ADR here in the decompressor
         uint32_t* compress_t = (uint32_t*)tptr;
+        
+        // the below code is taken from CTR_Redshift
         
         uint16_t c[0x300];
         uint8_t i = 0;
@@ -111,6 +115,12 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         
         colorramp_fill(c + 0x000, c + 0x100, c + 0x200, 0x100, sets);
         
+        // compress the colorramp
+        //  this compression algo abuses the fact
+        //  that the colorramp is a ramp, and thus
+        //  never goes down, allowing for
+        //  extremely low compression ratio
+        
         uint8_t prev[4];
         prev[0] = 0;
         prev[1] = 0;
@@ -119,18 +129,23 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         
         do
         {
+            // it only goes to 3 instead of 4 to save bits
+            // because the LCD is not transparent, save 256 bits
+            // by not including the Alpha component
             for(j = 0; j != 3; j++)
             {
                 uint8_t cur = c[i + (j << 8)] >> 8;
-                if(cur < prev[j])
+                if(cur < prev[j]) //never supposed to happen
                     puts("error wat");
                 
-                while(cur > prev[j])
+                while(cur > prev[j]) // write increment bit while bigger
                 {
                     prev[j]++;
                     compress_t[compress_o >> 5] |= 1 << (compress_o & 31);
                     compress_o++;
                 }
+                
+                //write increment stop bit
                 
                 compress_t[compress_o >> 5] &= ~(1 << (compress_o & 31));
                 compress_o++;
@@ -142,15 +157,19 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         
         tptr += ((compress_o + 31) >> 5) << 1;
         
+        // insert a security NOP just in case someting happens
+        
         if(((uint8_t*)tptr - patchbuf) & 2) // how do you even
             *(tptr++) = 0x46C0; //NOP
         
         mask &= ~PAT_REDSHIFT;
     }
     
-    /*
     if(mask & PAT_WIDE)
     {
+        // these patches below modify the MTX hardware registers
+        // DO NOT MODIFY THESE PATCHES
+        
         if(!agbg)
         {
             memcpy(tptr, twl_wide_bin, twl_wide_bin_size);
@@ -167,7 +186,6 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         
         mask &= ~PAT_WIDE;
     }
-    */
     
     if(mask & PAT_RELOC)
     {
@@ -214,6 +232,7 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
 size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* sets, size_t mask)
 {
     uint8_t* resptr = 0;
+    size_t patmask = mask;
     
     // === DMPGL patch for resolution changing
     
@@ -232,6 +251,10 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         if(resptr)
         {
             puts("Applying wide patch");
+            
+            // these values below change the TEXTURE resolution, not the rendering resolution
+            // DO NOT CHANGE
+            
             if(!agbg)
                 resptr[2] += (384 - 320); //lol
             else
@@ -247,6 +270,8 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 {
                     puts("Applying DMPGL patch");
                     
+                    // these two instructions set the RENDERING resolution
+                    
                     resptr[0] = 0xFF;
                     resptr[1] = 0x22;
                     resptr[2] = 0x81;
@@ -256,7 +281,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     resptr[6] = 0xC0;
                     resptr[7] = 0x46;
                     
-                    resptr[8] = 0xA2;
+                    resptr[8] = 0xA2; // skip one instruction
                     
                     mask &= ~PAT_WIDE;
                 }
@@ -374,7 +399,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 }
                 
                 // do not clear PAT_RELOC because it's cleared below
-                mask &= ~(pat_copyhole(res2ptr, sets, mask, 0) & ~(PAT_RELOC)); //TODO: check out size
+                mask &= ~(pat_copyhole(res2ptr, sets, patmask, 0) & ~(PAT_RELOC)); //TODO: check out size
                 
                 if(resptr)
                 {
@@ -492,5 +517,5 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         }
     }
     
-    return mask;
+    return mask & patmask;
 }
