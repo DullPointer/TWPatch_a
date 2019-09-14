@@ -10,7 +10,7 @@ MOV r0, #2
 LSL r0, #20
 
 LDR r2, [PC, #((copylen - . - 2) & ~3)]
-ADD r1, PC, #(payload_end - . - 4)
+ADD r1, PC, #(payload_end - . - 2 + 4) & ~3
 
 MOV r3, #0
 
