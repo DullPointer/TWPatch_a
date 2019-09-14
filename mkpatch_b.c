@@ -84,10 +84,28 @@ static void* LoadSection0(size_t* outsize)
 
 int main(int argc, char** argv)
 {
-    if(argv[1] && !strcmp("agb", argv[1]))
+    size_t pat = PAT_WIDE | PAT_HOLE;
+    
+    if(argv[1])
     {
-        puts("AGBG Debug");
-        agbg = 1;
+        if(!strcmp("agb", argv[1]))
+        {
+            puts("AGBG Debug");
+            agbg = 1;
+        }
+        
+        if(argv[2])
+        {
+            const char* aaa = argv[2];
+            
+            pat = 0;
+            
+            while(*aaa)
+            {
+                pat = (pat << 1) | (*aaa & 1);
+                ++aaa;
+            }
+        }
     }
     
     uint8_t* codeptr = 0;
@@ -154,7 +172,7 @@ int main(int argc, char** argv)
     settest.gamma[1] = 1.0F;
     settest.gamma[2] = 1.0F;
     settest.brightness = 1.0F;
-    pat_apply(codecptr, codecsize, &settest, ~0 & ~PAT_REDSHIFT);
+    pat_apply(codecptr, codecsize, &settest, pat);
     
     puts("Compressing... this will take a year or two");
     
