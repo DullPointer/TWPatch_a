@@ -234,6 +234,82 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     uint8_t* resptr = 0;
     size_t patmask = mask;
     
+    // === hidden debug patch
+    
+    if(mask & PAT_DEBUG)
+    {
+        resptr = memesearch(
+            // unique instructions to send parameters to svcKernelSetState
+            (const uint8_t[]){0x00, 0x22, 0x04, 0x20, 0x13, 0x46, 0x11, 0x46},
+            0, codecptr, codecsize, 8
+        );
+        
+        if(resptr)
+        {
+            puts("Patching out memory unmap");
+            
+            resptr[0x00] = 0xC0;
+            resptr[0x01] = 0x46;
+            resptr[0x02] = 0xC0;
+            resptr[0x03] = 0x46;
+            resptr[0x04] = 0xC0;
+            resptr[0x05] = 0x46;
+            resptr[0x06] = 0xC0;
+            resptr[0x07] = 0x46;
+            resptr[0x08] = 0xC0;
+            resptr[0x09] = 0x46;
+            resptr[0x0A] = 0xC0;
+            resptr[0x0B] = 0x46;
+            resptr[0x0C] = 0xC0;
+            resptr[0x0D] = 0x46;
+            resptr[0x0E] = 0xC0;
+            resptr[0x0F] = 0x46;
+            resptr[0x10] = 0xC0;
+            resptr[0x11] = 0x46;
+            resptr[0x12] = 0xC0;
+            resptr[0x13] = 0x46;
+            
+            mask &= ~PAT_DEBUG;
+        }
+    }
+    
+    // === remove opposing DPAD check
+    
+    if(mask & PAT_HID)
+    {
+        resptr = memesearch(
+            // bit stuff for removing opposing DPAD bits
+            (const uint8_t[]){0x40, 0x20, 0x20, 0x40, 0x20, 0x21, 0x21, 0x40, 0x40, 0x00, 0x49, 0x08, 0x08, 0x43, 0x84, 0x43},
+            0, codecptr, codecsize, 16
+        );
+        
+        if(resptr)
+        {
+            //TODO: this kind of NOP slide is very painful
+            
+            puts("Patching DPAD check");
+            
+            resptr[0x0] = 0xC0;
+            resptr[0x1] = 0x46;
+            resptr[0x2] = 0xC0;
+            resptr[0x3] = 0x46;
+            resptr[0x4] = 0xC0;
+            resptr[0x5] = 0x46;
+            resptr[0x6] = 0xC0;
+            resptr[0x7] = 0x46;
+            resptr[0x8] = 0xC0;
+            resptr[0x9] = 0x46;
+            resptr[0xA] = 0xC0;
+            resptr[0xB] = 0x46;
+            resptr[0xC] = 0xC0;
+            resptr[0xD] = 0x46;
+            resptr[0xE] = 0xC0;
+            resptr[0xF] = 0x46;
+            
+            mask &= ~PAT_HID;
+        }
+    }
+    
     // === DMPGL patch for resolution changing
     
     if(mask & PAT_WIDE)

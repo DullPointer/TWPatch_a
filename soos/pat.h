@@ -6,6 +6,8 @@
 #define PAT_HOLE        (1 << 1)
 #define PAT_RELOC       (1 << 2)
 #define PAT_WIDE        (1 << 3)
+#define PAT_HID         (1 << 4)
+#define PAT_DEBUG       (1 << 7)
 
 void* memesearch(const void* patptr, const void* bitptr, const void* searchptr, size_t searchlen, size_t patsize);
 size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask, size_t* outsize);

@@ -9,6 +9,10 @@
 ;CMP r1, #0
 ;BNE sk_already_inited
 B sk_already_inited
+NOP
+B sk_already_inited
+NOP
+B sk_already_inited
 
 ; runonce
     SUB r1, #1
