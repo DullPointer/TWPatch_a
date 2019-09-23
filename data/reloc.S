@@ -6,8 +6,8 @@
 
 PUSH {r4, r5}
 
-MOV r0, #2
-LSL r0, #20
+MOV r0, #0x13
+LSL r0, #16
 
 LDR r2, [PC, #((copylen - . - 2) & ~3)]
 ADD r1, PC, #(payload_end - . - 2 + 4) & ~3

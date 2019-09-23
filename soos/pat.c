@@ -11,6 +11,7 @@ typedef uint32_t u32;
 #include "reloc_bin.h"
 #include "agb_wide_bin.h"
 #include "twl_wide_bin.h"
+#include "trainer_bin.h"
 
 const size_t PAT_HOLE_SIZE = 0x1E0; // actually 0x1E8, but can't trust the user
 
@@ -187,12 +188,22 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         mask &= ~PAT_WIDE;
     }
     
+    // ===[Relocation]===
+    
     if(mask & PAT_RELOC)
     {
+        if(((uint8_t*)tptr - patchbuf) & 2)
+            *(tptr++) = 0x46C0; //NOP
+        
         memcpy(tptr, reloc_bin, reloc_bin_size);
         tptr += (reloc_bin_size + 1) >> 1;
         reloclen = ((uint32_t*)tptr) - 1;
+        
+        if(outsize)
+            outsize[1] = (size_t)((((uint8_t*)tptr - patchbuf) + 3) & ~3);
     }
+    
+    // below this is guaranteed to be relocated
     
     if(mask & PAT_HOLE)
     {
@@ -201,11 +212,19 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         
         if(((uint8_t*)tptr - patchbuf) & 2)
             *(tptr++) = 0x46C0; //NOP
+        
+        memcpy(tptr, trainer_bin, trainer_bin_size);
+        tptr += (trainer_bin_size + 1) >> 1;
+        
+        if(((uint8_t*)tptr - patchbuf) & 2)
+            *(tptr++) = 0x46C0; //NOP
     }
     
-    *(tptr++) = 0x4670; // MOV r0, LR
+    /**(tptr++) = 0x4670; // MOV r0, LR
     *(tptr++) = 0x3004; // ADD r0, #4
     *(tptr++) = 0x4686; // MOV LR, r0
+    */
+    *(tptr++) = 0x4770; // BX LR
     *(tptr++) = 0x4770; // BX LR
     
     do
@@ -234,44 +253,39 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     uint8_t* resptr = 0;
     size_t patmask = mask;
     
-    // === hidden debug patch
+    // ===[Always patch]===
     
-    if(mask & PAT_DEBUG)
+    /*resptr = memesearch(
+        // unique instructions to send parameters to svcKernelSetState
+        (const uint8_t[]){0x00, 0x22, 0x04, 0x20, 0x13, 0x46, 0x11, 0x46},
+        0, codecptr, codecsize, 8
+    );
+    
+    if(resptr)
     {
-        resptr = memesearch(
-            // unique instructions to send parameters to svcKernelSetState
-            (const uint8_t[]){0x00, 0x22, 0x04, 0x20, 0x13, 0x46, 0x11, 0x46},
-            0, codecptr, codecsize, 8
-        );
+        puts("Patching out memory unmap");
         
-        if(resptr)
-        {
-            puts("Patching out memory unmap");
-            
-            resptr[0x00] = 0xC0;
-            resptr[0x01] = 0x46;
-            resptr[0x02] = 0xC0;
-            resptr[0x03] = 0x46;
-            resptr[0x04] = 0xC0;
-            resptr[0x05] = 0x46;
-            resptr[0x06] = 0xC0;
-            resptr[0x07] = 0x46;
-            resptr[0x08] = 0xC0;
-            resptr[0x09] = 0x46;
-            resptr[0x0A] = 0xC0;
-            resptr[0x0B] = 0x46;
-            resptr[0x0C] = 0xC0;
-            resptr[0x0D] = 0x46;
-            resptr[0x0E] = 0xC0;
-            resptr[0x0F] = 0x46;
-            resptr[0x10] = 0xC0;
-            resptr[0x11] = 0x46;
-            resptr[0x12] = 0xC0;
-            resptr[0x13] = 0x46;
-            
-            mask &= ~PAT_DEBUG;
-        }
-    }
+        resptr[0x00] = 0xC0;
+        resptr[0x01] = 0x46;
+        resptr[0x02] = 0xC0;
+        resptr[0x03] = 0x46;
+        resptr[0x04] = 0xC0;
+        resptr[0x05] = 0x46;
+        resptr[0x06] = 0xC0;
+        resptr[0x07] = 0x46;
+        resptr[0x08] = 0xC0;
+        resptr[0x09] = 0x46;
+        resptr[0x0A] = 0xC0;
+        resptr[0x0B] = 0x46;
+        resptr[0x0C] = 0xC0;
+        resptr[0x0D] = 0x46;
+        resptr[0x0E] = 0xC0;
+        resptr[0x0F] = 0x46;
+        resptr[0x10] = 0xC0;
+        resptr[0x11] = 0x46;
+        resptr[0x12] = 0xC0;
+        resptr[0x13] = 0x46;
+    }*/
     
     // === remove opposing DPAD check
     
@@ -285,8 +299,6 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         
         if(resptr)
         {
-            //TODO: this kind of NOP slide is very painful
-            
             puts("Patching DPAD check");
             
             resptr[0x0] = 0xC0;
@@ -386,8 +398,12 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     if(mask & (PAT_HOLE | PAT_REDSHIFT)) // ALL of these require the unused driver code space
     {
         //resptr = memesearch((const uint8_t[]){0x00, 0x29, 0x03, 0xD0, 0x40, 0x69, 0x08, 0x60, 0x01, 0x20, 0x70, 0x47, 0x00, 0x20, 0x70, 0x47},
-        resptr = memesearch((const uint8_t[]){0x00, 0x23, 0x49, 0x01, 0xF0, 0xB5, 0x16, 0x01},
-            0, codecptr, codecsize, 8);
+        resptr = memesearch(
+            // Start of the unused MTX driver blob(?)
+            (const uint8_t[]){0x00, 0x23, 0x49, 0x01, 0xF0, 0xB5, 0x16, 0x01},
+            0, codecptr, codecsize, 8
+        );
+        
         if(resptr && (resptr - codecptr) < 0x1EE00)
         {
             puts("Overwriting unused function");
@@ -410,27 +426,53 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 *(resptr++) = 0x46;
             }
             
-            // == post-init pre-unmap debug print hook
-            uint8_t* res2ptr= !agbg ? memesearch
-            (
-                (const uint8_t[]){0x00, 0x28, 0x01, 0xDB, 0x11, 0x98, 0x40, 0x68, 0x58, 0xA1, 0x13, 0xF0, 0x8B, 0xF9},
-                (const uint8_t[]){0x00, 0x00, 0x07, 0x00, 0xFF, 0x00, 0xC0, 0x07, 0xFF, 0x00, 0xFF, 0x07, 0xFF, 0x07},
-                codecptr, codecsize,
-                14
-            )
-            :
-            memesearch
-            (
-                //(const uint8_t[]){0x6C, 0xA1, 0x30, 0x46, 0x12, 0xF0, 0x59, 0xFF},
-                //(const uint8_t[]){0xFF, 0x00, 0x30, 0x46, 0xFF, 0x07, 0xFF, 0x07},
-                (const uint8_t[]){0x30, 0x46, 0x10, 0x38, 0xC0, 0x46, 0xC0, 0x46},
+            size_t addroffs = 0;
+            
+            // === find relocation offset offset
+            uint8_t* res2ptr = memesearch(
+                //this works on both AGBG and TwlBg
+                (const uint8_t[]){0x7F, 0x00, 0x01, 0x00, 0x00, 0x00, 0xF0, 0x1E},
                 0, codecptr, codecsize, 8
             );
+            
+            if(res2ptr)
+            {
+                // fileoffs + addroffs == vaddr
+                addroffs = 0x400000 - *(uint32_t*)(res2ptr + 8);
+            }
+            
+            
+            // == post-init pre-unmap debug print hook
+            res2ptr = !agbg ?
+                memesearch
+                (
+                    (const uint8_t[]){0x00, 0x28, 0x01, 0xDB, 0x11, 0x98, 0x40, 0x68, 0x58, 0xA1, 0x13, 0xF0, 0x8B, 0xF9},
+                    (const uint8_t[]){0x00, 0x00, 0x07, 0x00, 0xFF, 0x00, 0xC0, 0x07, 0xFF, 0x00, 0xFF, 0x07, 0xFF, 0x07},
+                    codecptr, codecsize,
+                    14
+                )
+                :
+                memesearch
+                (
+                    //(const uint8_t[]){0x6C, 0xA1, 0x30, 0x46, 0x12, 0xF0, 0x59, 0xFF},
+                    //(const uint8_t[]){0xFF, 0x00, 0x30, 0x46, 0xFF, 0x07, 0xFF, 0x07},
+                    (const uint8_t[]){0x30, 0x46, 0x10, 0x38, 0xC0, 0x46, 0xC0, 0x46},
+                    0, codecptr, codecsize, 8
+                );
             
             printf("res2ptr %X %X\n", res2ptr, res2ptr - codecptr);
             
             if(res2ptr && (!agbg || !((res2ptr - codecptr) & 3)))
             {
+                res2ptr[0] = 0xC0;
+                res2ptr[1] = 0x46;
+                res2ptr[2] = 0xC0;
+                res2ptr[3] = 0x46;
+                res2ptr[4] = 0xC0;
+                res2ptr[5] = 0x46;
+                res2ptr[6] = 0xC0;
+                res2ptr[7] = 0x46;
+                
                 if(!agbg)
                 {
                     //there is more space in TwlBg, so NOPE it out
@@ -448,40 +490,44 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     }
                 }
                 
+                uint32_t absaddr = (((resptr - codecptr) + 0x300000) & ~1); //destination to unused driver code
+                
+                uint32_t toffs = (absaddr - (((res2ptr - codecptr) + addroffs) + 4)) & ~1; //offset from current address
+                
+                printf("from: %X to: %X diff: %X\n", (res2ptr - codecptr) + addroffs, absaddr, toffs);
+                
+                //shiny new method
+                
+                *(res2ptr++) = (uint8_t)(toffs >> 12);
+                *(res2ptr++) = (uint8_t)(((toffs >> 20) & 7) | 0xF0);
+                *(res2ptr++) = (uint8_t)(toffs >> 1);
+                *(res2ptr++) = (uint8_t)(((toffs >> 9) & 7) | 0xF8);
+                
+                
+                printf("%02X %02X %02X %02X\n", res2ptr[-4 + 0], res2ptr[-4 + 1], res2ptr[-4 + 2], res2ptr[-4 + 3]);
+                
+                //shitty old method
+                
                 // LDR && BLX PC
-                *(res2ptr++) = 0x00;
+                /**(res2ptr++) = 0x00;
                 *(res2ptr++) = 0x49;
                 *(res2ptr++) = 0x88;
                 *(res2ptr++) = 0x47;
                 
-                // THIS HAS TO BE IN THE 300000h REGION for the LR fix to work!
-                uint32_t absaddr = (((resptr - codecptr) + 0x300000) & ~1) | 1; // is Thumb
-                *(res2ptr++) = absaddr;
+                *(res2ptr++) = absaddr | 1;
                 *(res2ptr++) = absaddr >> 8;
                 *(res2ptr++) = absaddr >> 16;
                 *(res2ptr++) = absaddr >> 24;
+                */
                 
-                res2ptr = resptr; // hole offset
-                resptr = 0;
-                
-                // === find relocation offset offset
-                if(!(~mask & (PAT_RELOC | PAT_HOLE))) //don't relocate if PAT_HOLE is not set
-                {
-                    //this works on both AGBG and TwlBg
-                    resptr = memesearch(
-                        (const uint8_t[]){0x7F, 0x00, 0x01, 0x00, 0x00, 0x00, 0xF0, 0x1E},
-                        0, codecptr, codecsize, 8
-                    );
-                }
+                size_t copyret[2];
+                copyret[1] = 0;
                 
                 // do not clear PAT_RELOC because it's cleared below
-                mask &= ~(pat_copyhole(res2ptr, sets, patmask, 0) & ~(PAT_RELOC)); //TODO: check out size
+                mask &= ~(pat_copyhole(resptr, sets, patmask, copyret) & ~(PAT_RELOC)); //TODO: check out size
                 
-                if(resptr)
+                if(addroffs)
                 {
-                    // fileoffs + addroffs == vaddr
-                    size_t addroffs = 0x400000 - *(uint32_t*)(resptr + 8);
-                    
                     // == find dummy error code return function called from MainLoop
                     res2ptr = memesearch(
                         //same for both AGBG and TwlBg
@@ -522,10 +568,10 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         resptr[0] = 0x00;
                         resptr[1] = 0x20;
                         
-                        //resptr[2] = 0x00;
-                        //resptr[3] = 0x20;
-                        //resptr[4] = 0x00;
-                        //resptr[5] = 0x20;
+                        resptr[2] = 0x00;
+                        resptr[3] = 0x20;
+                        resptr[4] = 0x00;
+                        resptr[5] = 0x20;
                         
                         resptr[6] = 0x00;
                         resptr[7] = 0x20;
@@ -541,17 +587,32 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                             printf("Aligned code to %X\n", res2ptr-codecptr+addroffs);
                         }
                         
-                        *(res2ptr++) = 0x00;
+                        //absaddr -= 0x300000;
+                        //absaddr += codecptr;
+                        //absaddr += copyret[1];
+                        
+                        absaddr = 0x130000;
+                        
+                        uint32_t toffs = (absaddr - (((res2ptr - codecptr) + addroffs) + 4)) & ~1;
+                        
+                        *(res2ptr++) = (uint8_t)(toffs >> 12);
+                        *(res2ptr++) = (uint8_t)(((toffs >> 20) & 7) | 0xF0);
+                        *(res2ptr++) = (uint8_t)(toffs >> 1);
+                        *(res2ptr++) = (uint8_t)(((toffs >> 9) & 7) | 0xF8);
+                        
+                        
+                        /**(res2ptr++) = 0x00;
                         *(res2ptr++) = 0x49;
                         *(res2ptr++) = 0x88;
                         *(res2ptr++) = 0x47;
                         
-                        absaddr = 0x200000 | 1; // is Thumb
+                        //absaddr = 0x200000; // is Thumb
                         
-                        *(res2ptr++) = absaddr;
+                        *(res2ptr++) = absaddr | 1;
                         *(res2ptr++) = absaddr >> 8;
                         *(res2ptr++) = absaddr >> 16;
                         *(res2ptr++) = absaddr >> 24;
+                        */
                         
                         mask &= ~PAT_RELOC;
                         

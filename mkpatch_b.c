@@ -84,7 +84,7 @@ static void* LoadSection0(size_t* outsize)
 
 int main(int argc, char** argv)
 {
-    size_t pat = PAT_WIDE | PAT_HOLE;
+    size_t pat = PAT_HOLE | PAT_RELOC | PAT_HID | PAT_DEBUG;
     
     if(argv[1])
     {

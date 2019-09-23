@@ -1,33 +1,32 @@
 #include <stdint.h>
 
-uint8_t font[8 * 16];
-
-void font_draw(uint32_t* fb, uint32_t val, uint32_t y, uint32_t x)
+void font_draw(uint8_t* fb, uint32_t val)
 {
     int i = 32 - 4;
     
-    fb += (y * 180 * 8);
-    fb += x * 8;
+    uint32_t x, y, z;
     
     for(;;)
     {
-        int sw = (val >> i) & 0xF;
-        
-        const uint8_t* fnptr = font + (sw * 8);
+        uint32_t sw = (val >> i) & 0xF;
         
         for(y = 0; y != 8; y++)
         {
-            uint8_t fnt = fnptr[y];
+            uint32_t mask = 1 << (5 + ((sw >> 3) << 1));
+            uint32_t color = 0;
+            if(sw & 8) color |= mask | (mask << 8) | (mask << 16);
             
-            for(x = 0; x != 8; x++)
-            {
-                if(fnt & (1 << x))
-                    fb[x] = ~0;
-                else
-                    fb[x] = 0;
-            }
+            if(sw & 4) color |= 0x80;
+            color <<= 8;
+            if(sw & 2) color |= 0x80;
+            color <<= 8;
+            if(sw & 1) color |= 0x80;
             
-            fb += 180;
+            for(x = 0; x != 24;)
+                for(z = 0; z != 24; z += 8)
+                    fb[x++] = color >> z;
+            
+            fb += 240 * 3;
         }
         
         //fb -= 8 * 180;
