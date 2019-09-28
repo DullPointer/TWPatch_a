@@ -10,9 +10,7 @@ latch_all  equ 12
 
 rtcom_timeo_shift equ 14
 
-NOP
-NOP
-NOP
+
 PUSH {r0, r1}
 MOV r0, r8
 MOV r1, LR
@@ -27,7 +25,6 @@ B rtcom_reset
     ORR r0, r1
     
     LDR r1, =0xEB00000 + 0x10147100
-    NOP
     
     rtc_latch_loop:
     STRH r0, [r1]
@@ -40,6 +37,7 @@ B rtcom_reset
     
     .align 4
     .pool
+.endfunc
 
 .align 4
 
@@ -85,8 +83,7 @@ rtcom_restart:
     
     rtcom_cmdhandle:
         
-        CMP r1, #1
-        BEQ .cm01
+        ; Ping returns an error, so let's save space by not including it
         
         CMP r1, #2
         BEQ .cm02
@@ -121,9 +118,6 @@ rtcom_restart:
         BL rtc_latch
         
         B rtcom_reset
-        
-    .cm01: ; Ping
-        B rtcom_einval
         
         /*
     .cm02: ; TestCPad
@@ -162,11 +156,20 @@ rtcom_restart:
         B rtcom_retval
     
     .cm44: ; UserCodeExecARM
+        MOV r1, r2
+        PUSH {r0, r2}
         LDR r2, =0x200FFC
+        MOV r0, r3
+        LSL r0, #24
+        LSR r0, #24
         ADD r2, #4
-        LDRB r0, [r5, #0]
+        
         BLX r2
         MOV r1, r0
+        
+        POP {r0, r2}
+        ADD r2, #1
+        STR r2, [r0, #4]
         B rtcom_retval
         
         

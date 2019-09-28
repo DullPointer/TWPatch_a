@@ -12,19 +12,18 @@ void font_draw(uint8_t* fb, uint32_t val)
         
         for(y = 0; y != 8; y++)
         {
-            uint32_t mask = 1 << (5 + ((sw >> 3) << 1));
-            uint32_t color = 0;
-            if(sw & 8) color |= mask | (mask << 8) | (mask << 16);
-            
-            if(sw & 4) color |= 0x80;
-            color <<= 8;
-            if(sw & 2) color |= 0x80;
-            color <<= 8;
-            if(sw & 1) color |= 0x80;
+            uint32_t v = sw >> 3;
+            v |= v << 8;
+            v |= v << 16;
+            v |= ((sw     ) & 1) << 17;
+            v |= ((sw >> 1) & 1) << 9;
+            v |= ((sw >> 2) & 1) << 1;
+            v |= v << 2;
+            v |= v << 4;
             
             for(x = 0; x != 24;)
                 for(z = 0; z != 24; z += 8)
-                    fb[x++] = color >> z;
+                    fb[x++] = v >> z;
             
             fb += 240 * 3;
         }

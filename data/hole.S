@@ -4,60 +4,11 @@
 
 .align 4
 
-;ADD r0, PC, #((initflag - . - 2) & ~3)
-;LDR r1, [r0]
-;CMP r1, #0
-;BNE sk_already_inited
-B sk_already_inited
-NOP
-
-; runonce
-    ;SUB r1, #1
-    ;STR r1, [r0]
-    
-    /*
-    LDR r0, =0x1209EC
-    LDR r2, =0x1F000000
-    LDR r3, =0x1F300000
-    
-    STR r2, [r0, #0]
-    STR r3, [r0, #4]
-    STRH r1, [r0, #8]
-    
-    LDR r0, =0x10008E ; TODO unhardcode
-    LDRB r1, [r0]     ; load offset byte
-    
-    CMP r1, #0x80     ; prevent nullptr deref
-    BLT already_inited
-    
-    ; do screen swap
-    
-    LSL r1, #2        ; (this << 2)
-    ADD r1, r0        ; + PC
-    MOV r3, #3
-    ADD r1, r3        ; + 3
-    BIC r1, r3        ; & ~3
-    LDR r2, [r1]      ; upscale disable
-    LDR r0, [r2, #12] ; TwlState*
-    
-    */
-    /*
-    MOV r1, #0xC0
-    LSL r1, #16
-    ADD r1, #0xFF
-    
-    STR r1, [r0, #0x18]
-    */
-    
-sk_already_inited:
-    B already_inited
-
-.align 4
-.pool
+B already_inited
 
 .align 4
 
-.func draw_hex ; r0 fb, r1 val, r2 y, r3 x
+.func draw_hex ; r0 fb, r1 val
     .include "../fontest.S"
 
 .align 4
@@ -99,113 +50,106 @@ fonttable:
     ;.db 0b00000000,0b01111111,0b01111111,0b01001000,0b01001000,0b01000000,0b01000000,0b00000000
     
     .pool
+
+.endfunc
     
 .align 4
 
 already_inited:
 
-/*
-LDR r0, =0x1EC46000
-MOV r1, #(1 << 1) ; B button
-LDRH r2, [r0]
-TST r2, r1
-BNE skip_fbswap ; pressing button grounds it
-*/
-
 PUSH {r4, r5, r6, r7}
 MOV r6, LR
 MOV r7, r8
 
-LDR r0, =0x1EF00400 + 0x40
-LDR r2, [r0, #0x78 - 0x40]
+/*
+ADD r5, PC, #(initflag - . - 2) & ~3
+
+LDR r0, =0x1EC46000
+MOV r1, #1 ; R button
+LSL r1, #8
+ADD r1, #2 ; B button
+LDRH r2, [r0]
+MVN r2, r2
+TST r2, r1
+BEQ skip_btn
+
+LDR r3, [r5, #0]
+CMP r3, #0
+BNE cont_draw
+
+LDR r4, [r5, #4]
+ADD r4, #0xFF
+ADD r4, #1
+
 MOV r3, #1
-AND r2, r3
+LSL r3, #8
+TST r2, r3
+BNE str_addr
+SUB r4, #0xC0
+str_addr:
+STR r4, [r5, #4]
+
+MOV r1, #1
+
+B cont_draw
+
+skip_btn:
+MOV r2, #0
+
+cont_draw:
+STR r2, [r5, #0]
+*/
+
+
+LDR r0, =0x1EF00400 + 0x68 ; GPULCD addr
+LDR r2, [r0, #0x78 - 0x68] ; fb select
+MOV r3, #4
 LSL r2, #2
-ADD r0, #0x68 - 0x40
-ADD r2, r0
-LDR r0, [r2] ; TODO: FIX THIS CRASH
+AND r2, r3
+LDR r0, [r0, r2] ; TODO: FIX THIS CRASH
+
+LDR r2, =0x1F000000 + 0x2D000 + 0xCA80 + (0xF0 * 3)
 
 LSL r0, #8
 LSR r0, #8
-
-LDR r2, =0x1F000000 + 0x2D000 + 0xCA80 + (0xF0 * 3)
 ADD r0, r2
-
-MOV r2, #0
-MOV r3, #0
 
 ;LDR r4, =0x1EC41000 + 0x100
 ;LDR r4, =0x1FFFFFA0 - 0x1FFAC000 + 0x100000
 ;LDR r4, =0x1FFB6800 - 0x1FF84800 + 0x100000
 LDR r4, [PC, #(initflag - . - 2 + 4) & ~3]
-MOV r5, #0
+MOV r5, r4
+MOV r3, r4
+ADD r5, #(22 * 4)
 
-print_again:
-LDR r1, [r4]
-BL draw_hex
-ADD r4, #4
-ADD r5, #1
-CMP r5, #22
-BNE print_again
-
-
+;MOV r1, r4
+;BL draw_hex
 ;SUB r0, #0x20
 
+print_again:
+LDMIA r4!, {r1}
+BL draw_hex
+CMP r4, r5
+BLT print_again
 
+/*LDR r2, =(9 * 8 * 240 * 3) - (22 * 8 * 3)
+SUB r0, r2
+MOV r2, #0
 
-MOV r1, r4
+LDR r1, [PC, #(initflag - .) & ~3]
+BL draw_hex
+*/
+
+MOV r1, r3
 LDR r0, =0xFFFF8001
 MOV r2, #1
 LSL r2, #16
 SWI 0x54 ; FlushProcessDataCache(Handle, void*, u32)
 
-.align 2
 
 MOV LR, r6
 MOV r8, r7
 POP {r4, r5, r6, r7}
-
-/*
-LDR r0, =0x10008E ; TODO unhardcode
-LDRB r1, [r0]     ; load offset byte
-
-CMP r1, #0x80     ; prevent nullptr deref
-BLT hole_end
-
-; do screen swap
-
-LSL r1, #2        ; (this << 2)
-ADD r1, r0        ; + PC
-MOV r3, #3
-ADD r1, r3        ; + 3
-BIC r1, r3        ; & ~3
-LDR r2, [r1]      ; upscale disable
-LDR r0, [r2, #12] ; TwlState*
-
-LDR r2, [r0, #(0x30 + (0 * 0x14) + 4)]
-LDR r3, [r0, #(0x30 + (1 * 0x14) + 4)]
-STR r3, [r0, #(0x30 + (0 * 0x14) + 4)]
-STR r2, [r0, #(0x30 + (1 * 0x14) + 4)]
-*/
-
-skip_fbswap:
-
-hole_end:
-
-/*
-; fix LR
-
-MOV r0, LR
-
-;ADD r1, PC, #0
-;LSR r1, #20
-;CMP r1, #3
-;BNE payload_end ; do not fuck up LR if already relocated
-
-; only fix LR when running in 300000h region
-ADD r0, #4
-MOV LR, r0
-*/
 
 B payload_end
 
