@@ -8,7 +8,7 @@ latch_data equ 4
 latch_stat equ 8
 latch_all  equ 12
 
-rtcom_timeo_shift equ 20
+rtcom_timeo_shift equ 14
 
 NOP
 NOP
@@ -55,7 +55,7 @@ rtcom_restart:
     BEQ rtcom_kil
     
     LDRH r1, [r5]
-    ;MOV r0, r1
+    MOV r3, r1
     
     LSR r1, #8
     BEQ rtcom_done ; status == 00h
@@ -76,8 +76,8 @@ rtcom_restart:
         CMP r1, #2
         BEQ rtcom_restart ; status == 0x82 self NAK
         
-        SUB r1, #3
-        BGE rtcom_kil ; status >= 0x83 (invalid for now)
+        CMP r1, #1
+        BNE rtcom_kil ; status >= 0x83 (invalid for now)
         
         ; status == 0x81 DS ACK
         LDMIA r0!, {r1, r2}
@@ -91,17 +91,23 @@ rtcom_restart:
         CMP r1, #2
         BEQ .cm02
         
-        CMP r1, #0x40
-        BEQ .cm40
+        ;CMP r1, #0x40
+        ;BEQ .cm40
+        
+        CMP r1, #0x41
+        BEQ .cm41
+        
+        CMP r1, #0x42
+        BEQ .cm42
+        
+        CMP r1, #0x44
+        BEQ .cm44
         
         ; fallthru'
         
     rtcom_einval:
-        MOV r1, #0x82
-        STRB r1, [r5, #1]
-        MOV r0, latch_stat
-        BL rtc_latch
-        B rtcom_reset
+        MOV r0, #0x82
+        B rtcom_latstat
         
     rtcom_retval:
         STRB r1, [r5, #0]
@@ -109,16 +115,18 @@ rtcom_restart:
         BL rtc_latch
         
         MOV r0, #0x80
+      rtcom_latstat:
         STRB r0, [r5, #1]
         MOV r0, latch_stat
         BL rtc_latch
         
         B rtcom_reset
         
-    .cm01:
+    .cm01: ; Ping
         B rtcom_einval
         
-    .cm02:
+        /*
+    .cm02: ; TestCPad
         CMP r2, #3
         BGE rtcom_einval
         
@@ -127,17 +135,42 @@ rtcom_restart:
         ADD r2, #1
         STR r2, [r0, #4]
         B rtcom_retval
+        */
         
-    .cm40:
+    .cm02:
+        MOV r1, #0x77
+        B rtcom_retval
         
-        B rtcom_einval
+    .cm40: ; GetProcAddress
+        ;B rtcom_einval
         
-    .cm41:
+    .cm41: ; UploadCode
+        MOV r1, r3
+        LDR r3, =0x200FFC
+        STRB r1, [r3, r2]
+        ADD r2, #1
+        STR r2, [r0, #4]
+        B rtcom_retval
         
-        B rtcom_einval
+    .cm42: ; UserCodeRWX
+        LDR r0, =0x200FFC
+        ;LDR r1, [r0]
+        ADD r0, #4
+        MOV r1, #8
+        LSL r1, #12
+        SWI 0x7A
+        B rtcom_retval
+    
+    .cm44: ; UserCodeExecARM
+        LDR r2, =0x200FFC
+        ADD r2, #4
+        LDRB r0, [r5, #0]
+        BLX r2
+        MOV r1, r0
+        B rtcom_retval
+        
         
 rtcom_kil:
-    ADD r0, PC, #(rtcom_state - . - 2) & ~3
     MOV r1, #0x00
     STRB r1, [r5, #1]
     MOV r0, latch_stat
@@ -153,18 +186,9 @@ rtcom_state:
 
 .align 4
 rtcom_done:
-NOP
-NOP
-NOP
-NOP
 
 POP {r0 - r7}
 MOV r8, r0
 MOV LR, r1
 POP {r0, r1}
-
-NOP
-NOP
-NOP
-NOP
 .close
