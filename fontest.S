@@ -1,72 +1,71 @@
 font_draw:
-    SUB r0, #8 * 3
-	push	{r0 - r7}
-	mov	r4, #28
-	str	r1, [sp, #4]
-.L13:
-	ldr	r5, [sp, #4]
+	nop
+	sub r0, #(8 * 3)
+	push	{r0 - r7, lr}
+	mov	r2, #28
+	mov	r5, #1
+	sub	sp, #20
+	str	r1, [sp, #12]
+.L7:
+	ldr	r4, [sp, #12]
 	mov	r3, #15
-	lsr	r5, r4
-	mov	r2, #1
+	lsr	r4, r2
+	and	r3, r4
+	lsr	r6, r3, #3
+	lsl	r7, r6, #8
+	orr	r6, r7
+	mov	r1, r6
+	lsr	r7, r3, #1
+	and	r7, r5
+	lsl	r7, #9
+	and	r4, r5
+	lsr	r3, #2
+	orr	r7, r1
+	lsl	r4, #17
 	and	r3, r5
-	lsr	r3, #3
 	lsl	r3, #1
-	add	r3, #5
-	lsl	r2, r3
-	mov	r3, r2
-	mov	r2, #180
-	lsl	r2, #5
-	add	r2, r0
-	str	r2, [sp, #8]
-	mov	r2, #4
-	mov	r7, #0
-	tst	r5, r2
-	beq	.L3
-	mov	r7, r3
-.L3:
-	mov	r2, r3
-	mov	r1, #2
-	lsl	r7, #8
-	orr	r2, r7
-	tst	r5, r1
-	bne	.L5
-	mov	r2, r7
+	orr	r4, r7
+	orr	r4, r3
+	lsl	r6, #16
+	orr	r6, r4
+	lsl	r3, r6, #2
+	orr	r6, r3
+	lsl	r3, r6, #4
+	orr	r6, r3
+	mov	r3, #180
+	lsl	r3, #5
+	add	r3, r0
+	str	r6, [sp, #4]
+	str	r3, [sp, #8]
 .L5:
-	mov	r1, #1
-	lsl	r2, #8
-	orr	r3, r2
-	tst	r5, r1
-	bne	.L11
-	mov	r3, r2
-.L11:
 	mov	r7, r0
-	mov	r5, r0
+	mov	r4, r0
 	add	r7, #24
-.L8:
-	mov	r2, #0
-.L9:
-	lsl	r1, r2, #3
+.L2:
+	mov	r3, #0
+.L3:
+	lsl	r1, r3, #3
 	mov	r8, r1
-	mov	r1, r3
 	mov	r6, r8
+	ldr	r1, [sp, #4]
 	lsr	r1, r6
-	strb	r1, [r5, r2]
-	add	r2, #1
-	cmp	r2, #3
-	bne	.L9
-	add	r5, #3
-	cmp	r7, r5
-	bne	.L8
-	mov	r2, #180
-	lsl	r2, #2
-	add	r0, r2
-	ldr	r2, [sp, #8]
-	cmp	r0, r2
-	bne	.L11
-	cmp	r4, #0
+	strb	r1, [r4, r3]
+	add	r3, #1
+	cmp	r3, #3
+	bne	.L3
+	add	r4, #3
+	cmp	r7, r4
+	bne	.L2
+	mov	r3, #180
+	lsl	r3, #2
+	add	r0, r3
+	ldr	r3, [sp, #8]
+	cmp	r0, r3
+	bne	.L5
+	cmp	r2, #0
 	beq	.L1
-	sub	r4, #4
-	b	.L13
+	sub	r2, #4
+	b	.L7
 .L1:
-	pop	{r0 - r7}
-	bx	lr
+	add	sp, #20
+	pop	{r0 - r7, pc}

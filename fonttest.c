@@ -10,7 +10,7 @@ void font_draw(uint8_t* fb, uint32_t val)
     {
         uint32_t sw = (val >> i) & 0xF;
         
-        for(y = 0; y != 8; y++)
+        for(y = 0; y < 8; y++)
         {
             uint32_t v = sw >> 3;
             v |= v << 8;
@@ -21,8 +21,8 @@ void font_draw(uint8_t* fb, uint32_t val)
             v |= v << 2;
             v |= v << 4;
             
-            for(x = 0; x != 24;)
-                for(z = 0; z != 24; z += 8)
+            for(x = 0; x < 24;)
+                for(z = 0; z < 24; z += 8)
                     fb[x++] = v >> z;
             
             fb += 240 * 3;
@@ -31,7 +31,7 @@ void font_draw(uint8_t* fb, uint32_t val)
         //fb -= 8 * 180;
         //fb += 8;
         
-        if(!i)
+        if(i <= 0)
             break;
         i -= 4;
     }
