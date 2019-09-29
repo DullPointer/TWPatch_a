@@ -6,6 +6,8 @@
 
 B already_inited
 B already_inited
+B already_inited
+B already_inited
 
 .align 4
 
@@ -84,18 +86,21 @@ STR r2, [r5, #0]
 */
 
 
-LDR r0, =0x1EF00400 + 0x68
-LDR r2, [r0, #0x78 - 0x68]
+LDR r0, =0x1EF00400 + 0x40
+LDR r2, [r0, #0x78 - 0x40]
 MOV r3, #1
 AND r2, r3
 LSL r2, #2
-LDR r0, [r0, r2] ; TODO: FIX THIS CRASH
+ADD r0, #0x68 - 0x40
+ADD r2, r0
+LDR r0, [r2] ; TODO: FIX THIS CRASH
 
 LSL r0, #8
 LSR r0, #8
 
 LDR r2, =0x1F000000 + 0x2D000 + 0xCA80 + (0xF0 * 3)
 ADD r0, r2
+MOV r3, r0
 
 ;LDR r4, =0x1EC41000 + 0x100
 ;LDR r4, =0x1FFFFFA0 - 0x1FFAC000 + 0x100000
@@ -103,8 +108,10 @@ ADD r0, r2
 LDR r4, [PC, #(initflag - . - 2 + 4) & ~3]
 MOV r5, #0
 
-/*LDR r1, =0x76543210
+/*
+LDR r1, =0x76543210
 BL draw_hex
+
 LDR r1, =0xFEDCBA98
 BL draw_hex
 */
@@ -115,7 +122,7 @@ print_again:
 LDR r1, [r4, r5]
 BL draw_hex
 ADD r5, #4
-CMP r5, #(4 * 18)
+CMP r5, #(4 * 5)
 BNE print_again
 
 
@@ -123,11 +130,11 @@ BNE print_again
 SUB r0, r2
 MOV r2, #0
 
-LDR r1, [PC, #(initflag - .) & ~3]
+LDR r1, [PC, #(initflag - . - 2) & ~3]
 BL draw_hex
 */
 
-MOV r1, r0
+MOV r1, r3
 LDR r0, =0xFFFF8001
 ;MOV r2, #1
 ;LSL r2, #16
