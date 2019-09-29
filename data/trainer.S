@@ -8,20 +8,19 @@ latch_data equ 4
 latch_stat equ 8
 latch_all  equ 12
 
-rtcom_timeo_shift equ 14
+rtcom_timeo_shift equ 15
 
 
-PUSH {r0, r1}
-MOV r0, r8
-MOV r1, LR
 PUSH {r0 - r7}
-B rtcom_reset
+MOV r6, r8
+MOV r7, LR
+B rtcom_entry
 
 .func rtc_latch ; r0 = bits
-    PUSH {r0 - r3}
+    PUSH {r0, r1, r2, LR}
     
     MOV r1, #3
-    LSL r1, #14
+    LSL r1, #13
     ORR r0, r1
     
     LDR r1, =0xEB00000 + 0x10147100
@@ -29,30 +28,40 @@ B rtcom_reset
     rtc_latch_loop:
     STRH r0, [r1]
     LDRH r2, [r1]
-    LSL r2, #(31 - 14)
+    LSL r2, #17
     BMI rtc_latch_loop
     
-    POP {r0 - r3}
+    POP {r0, r1, r2, PC}
+
+.func rtc_irq
+    MOV r1, #0
+    STRH r1, [r5, #0x00] ; r5 is guaranteed to point to RTC +0
+    LSL r2, r0, #12 ; r0 is guaranteed to be 8 (latch_stat equ 8)
+    STRH r2, [r5, #0x00]
+    rtc_irq_subloop:
+    LSR r2, #1 ; assert ARM7 IRQ spinwait
+    BNE rtc_irq_subloop
     BX LR
     
-    .align 4
-    .pool
+    ;.align 4
+    ;.pool
 .endfunc
 
-.align 4
+rtcom_entry:
+
+
 
 rtcom_reset:
 
-LDR r5, =0xEB00000 + 0x10147112
+LDR r5, =0xEB00000 + 0x10147100
 MOV r4, #1
 LSL r4, rtcom_timeo_shift
-MOV r1, #0
 
 rtcom_restart:
     SUB r4, #1
     BEQ rtcom_kil
     
-    LDRH r1, [r5]
+    LDRH r1, [r5, #0x12]
     MOV r3, r1
     
     LSR r1, #8
@@ -103,24 +112,27 @@ rtcom_restart:
         ; fallthru'
         
     rtcom_einval:
-        MOV r0, #0x82
+        MOV r1, #0x82
         B rtcom_latstat
         
     rtcom_retval:
-        STRB r1, [r5, #0]
+        STRB r1, [r5, #0x12]
         MOV r0, latch_data
         BL rtc_latch
         
-        MOV r0, #0x80
+        MOV r1, #0x80
       rtcom_latstat:
-        STRB r0, [r5, #1]
+        STRB r1, [r5, #0x13]
         MOV r0, latch_stat
         BL rtc_latch
+        BL rtc_irq
         
         B rtcom_reset
         
-        /*
     .cm02: ; TestCPad
+        MOV r1, #0x77
+        
+        /*
         CMP r2, #3
         BGE rtcom_einval
         
@@ -128,41 +140,38 @@ rtcom_restart:
         LDRB r1, [r3, r2]
         ADD r2, #1
         STR r2, [r0, #4]
-        B rtcom_retval
         */
         
-    .cm02:
-        MOV r1, #0x77
         B rtcom_retval
         
     .cm40: ; GetProcAddress
         ;B rtcom_einval
         
     .cm41: ; UploadCode
-        MOV r1, r3
-        LDR r3, =0x200FFC
-        STRB r1, [r3, r2]
+        LDR r1, =0x201000
+        SUB r1, #4
+        STRB r3, [r1, r2]
         ADD r2, #1
         STR r2, [r0, #4]
         B rtcom_retval
         
     .cm42: ; UserCodeRWX
-        LDR r0, =0x200FFC
-        ;LDR r1, [r0]
-        ADD r0, #4
+        LDR r0, =0x201000
+        ;LDR r1, [r0, #-4]
         MOV r1, #8
         LSL r1, #12
         SWI 0x7A
         B rtcom_retval
     
     .cm44: ; UserCodeExecARM
+        
+        /*
         MOV r1, r2
         PUSH {r0, r2}
-        LDR r2, =0x200FFC
+        LDR r2, =0x201000
         MOV r0, r3
         LSL r0, #24
         LSR r0, #24
-        ADD r2, #4
         
         BLX r2
         MOV r1, r0
@@ -171,11 +180,17 @@ rtcom_restart:
         ADD r2, #1
         STR r2, [r0, #4]
         B rtcom_retval
+        */
+        LDR r2, =0x201000
+        LDRB r0, [r5, #0x12]
+        BLX r2
+        MOV r1, r0
+        B rtcom_retval
         
         
 rtcom_kil:
     MOV r1, #0x00
-    STRB r1, [r5, #1]
+    STRB r1, [r5, #0x13]
     MOV r0, latch_stat
     BL rtc_latch
     B rtcom_done
@@ -190,8 +205,7 @@ rtcom_state:
 .align 4
 rtcom_done:
 
+MOV r8, r6
+MOV LR, r7
 POP {r0 - r7}
-MOV r8, r0
-MOV LR, r1
-POP {r0, r1}
 .close
