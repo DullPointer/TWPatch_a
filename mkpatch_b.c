@@ -84,7 +84,7 @@ static void* LoadSection0(size_t* outsize)
 
 int main(int argc, char** argv)
 {
-    size_t pat = PAT_HOLE | PAT_RELOC | PAT_HID | PAT_DEBUG;
+    size_t pat = PAT_HID | PAT_RTCOM;
     
     if(argv[1])
     {
@@ -106,6 +106,12 @@ int main(int argc, char** argv)
                 ++aaa;
             }
         }
+    }
+    
+    if(pat & PAT_RELOC)
+    {
+        puts("Relocation patch is obsolete! Please unmask the bit!");
+        return 1;
     }
     
     uint8_t* codeptr = 0;

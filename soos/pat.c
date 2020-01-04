@@ -13,7 +13,8 @@ typedef uint32_t u32;
 #include "twl_wide_bin.h"
 #include "trainer_bin.h"
 
-const size_t PAT_HOLE_SIZE = 0x1E0; // actually 0x1E8, but can't trust the user
+const size_t PAT_HOLE_SIZE = 0x13C; // only used for percentage display
+const size_t PAT_HOLE_ADDR = 0x130000 - 0x100; // not used for actual payload positioning
 
 extern int agbg;
 
@@ -37,13 +38,13 @@ __attribute__((optimize("Ofast"))) void* memesearch(const void* patptr, const vo
                 if(++j != patsize)
                     continue;
                 
-                printf("memesearch bit %X %X\n", i, j);
+                /*printf("memesearch bit %X %X\n", i, j);
                 for(j = 0; j != patsize; j++) printf("%02X", src[i + j]);
                 puts("");
                 for(j = 0; j != patsize; j++) printf("%02X", pat[j]);
                 puts("");
                 for(j = 0; j != patsize; j++) printf("%02X", bit[j]);
-                puts("");
+                puts("");*/
                 return src + i;
             }
             
@@ -63,11 +64,11 @@ __attribute__((optimize("Ofast"))) void* memesearch(const void* patptr, const vo
                 if(++j != patsize)
                     continue;
                 
-                printf("memesearch nrm %X %X\n", i, j);
+                /*printf("memsearch nrm %X %X\n", i, j);
                 for(j = 0; j != patsize; j++) printf("%02X", src[i + j]);
                 puts("");
                 for(j = 0; j != patsize; j++) printf("%02X", pat[j]);
-                puts("");
+                puts("");*/
                 return src + i;
             }
             
@@ -212,6 +213,22 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
         
         if(((uint8_t*)tptr - patchbuf) & 2)
             *(tptr++) = 0x46C0; //NOP
+    }
+    
+    if(mask & PAT_RTCOM)
+    {
+        // Only fix glitchy branch if HOLE or RELOC mess up the chain flow
+        if(!(mask & PAT_HOLE) != !(mask & PAT_RELOC))
+        {
+            puts("Glitchy branch workaround");
+            *(tptr++) = 0x46C0; //NOP
+            *(tptr++) = 0x46C0; //NOP
+            *(tptr++) = 0x46C0; //NOP
+            *(tptr++) = 0x46C0; //NOP
+            
+            if(((uint8_t*)tptr - patchbuf) & 2)
+                *(tptr++) = 0x46C0; //NOP
+        }
         
         memcpy(tptr, trainer_bin, trainer_bin_size);
         tptr += (trainer_bin_size + 1) >> 1;
@@ -220,10 +237,6 @@ size_t pat_copyhole(uint8_t* patchbuf, const color_setting_t* sets, size_t mask,
             *(tptr++) = 0x46C0; //NOP
     }
     
-    /**(tptr++) = 0x4670; // MOV r0, LR
-    *(tptr++) = 0x3004; // ADD r0, #4
-    *(tptr++) = 0x4686; // MOV LR, r0
-    */
     *(tptr++) = 0x4770; // BX LR
     *(tptr++) = 0x4770; // BX LR
     
@@ -395,30 +408,56 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     
     // === unused MTX driver code
     
-    if(mask & (PAT_HOLE | PAT_REDSHIFT)) // ALL of these require the unused driver code space
+    if(mask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM)) // ALL of these require the unused driver code space
     {
+        // ==[ Alternative code space, unused for now ]==
         //resptr = memesearch((const uint8_t[]){0x00, 0x29, 0x03, 0xD0, 0x40, 0x69, 0x08, 0x60, 0x01, 0x20, 0x70, 0x47, 0x00, 0x20, 0x70, 0x47},
-        resptr = memesearch(
-            // Start of the unused MTX driver blob(?)
-            (const uint8_t[]){0x00, 0x23, 0x49, 0x01, 0xF0, 0xB5, 0x16, 0x01},
-            0, codecptr, codecsize, 8
-        );
         
-        if(resptr && (resptr - codecptr) < 0x1EE00)
+        // Start of the unused MTX driver blob(?)
+        //(const uint8_t[]){0x00, 0x23, 0x49, 0x01, 0xF0, 0xB5, 0x16, 0x01},
+        //0, codecptr, codecsize, 8
+        
+        do
         {
-            puts("Overwriting unused function");
+            // This is a really hacky way to find an unused initializer table
+            //  and safely overwrite them without overwriting an used function in the middle
             
-            size_t it = 0;
+            const uint8_t spat[] = {0x04, 0x48, 0x00, 0x93, 0x13, 0x46, 0x0A, 0x46, 0x00, 0x68, 0x21, 0x46};
+            const uint8_t smat[] = {0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
             
-            // make sure the code crashes when a fuckup happens
-            do
+            resptr = memesearch(spat, smat,
+                codecptr, codecsize, sizeof(spat));
+            
+            if(resptr)
             {
-                //resptr[it++] = 0xFE;
-                //resptr[it++] = 0xE7;
-                resptr[it++] = 0xFF;
-                resptr[it++] = 0xBE;
+                // This is a two-pass pattern
+                resptr = memesearch(spat, smat,
+                    resptr + 1, codecsize - (codecptr - resptr), sizeof(spat));
             }
-            while(it != PAT_HOLE_SIZE);
+            
+            if(resptr)
+            {
+                printf("pat2 at %X\n", (resptr - codecptr) + 0x300000);
+                
+                resptr += 0x38; // Skip used function blob
+                
+                // Align search ptr (skip const data and find real func start)
+                if(resptr[1] != 0x48 || !resptr[3])
+                {
+                    resptr += 4;
+                    if(resptr[1] != 0x48 || !resptr[3])
+                    {
+                        printf("Invalid pattern match at %X\n", (resptr - codecptr) + 0x300000);
+                        resptr = 0;
+                    }
+                }
+            }
+        }
+        while(0);
+        
+        if(resptr && (resptr - codecptr) < 0x20000)
+        {
+            printf("Overwriting unused function %X\n", (resptr - codecptr) + 0x300000);
             
             if((resptr - codecptr) & 2) //must be 4-aligned for const pools
             {
@@ -438,11 +477,13 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
             if(res2ptr)
             {
                 // fileoffs + addroffs == vaddr
+                //   01FF00h+ addroffs == 100000h
+                //   400000h-   31FF00h== 0E0100h
                 addroffs = 0x400000 - *(uint32_t*)(res2ptr + 8);
             }
             
             
-            // == post-init pre-unmap debug print hook
+            // == post-init pre-unmap debug print hook (white screen before svcKernelSetState(4))
             res2ptr = !agbg ?
                 memesearch
                 (
@@ -454,16 +495,14 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 :
                 memesearch
                 (
-                    //(const uint8_t[]){0x6C, 0xA1, 0x30, 0x46, 0x12, 0xF0, 0x59, 0xFF},
-                    //(const uint8_t[]){0xFF, 0x00, 0x30, 0x46, 0xFF, 0x07, 0xFF, 0x07},
                     (const uint8_t[]){0x30, 0x46, 0x10, 0x38, 0xC0, 0x46, 0xC0, 0x46},
                     0, codecptr, codecsize, 8
                 );
             
-            printf("res2ptr %X %X\n", res2ptr, res2ptr - codecptr);
-            
             if(res2ptr && (!agbg || !((res2ptr - codecptr) & 3)))
             {
+                printf("Init hook %X\n", (res2ptr - codecptr) + addroffs);
+                
                 res2ptr[0] = 0xC0;
                 res2ptr[1] = 0x46;
                 res2ptr[2] = 0xC0;
@@ -475,22 +514,25 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 
                 if(!agbg)
                 {
-                    //there is more space in TwlBg, so NOPE it out
+                    //there is more space in TwlBg to clear
                     res2ptr[ 8] = 0xC0;
                     res2ptr[ 9] = 0x46;
                     res2ptr[10] = 0xC0;
                     res2ptr[11] = 0x46;
                     res2ptr[12] = 0xC0;
                     res2ptr[13] = 0x46;
-                    
-                    if((res2ptr - codecptr) & 3) //must be 4-aligned for Thumb ADR
-                    {
-                        *(res2ptr++) = 0xC0;
-                        *(res2ptr++) = 0x46;
-                    }
                 }
                 
-                uint32_t absaddr = (((resptr - codecptr) + 0x300000) & ~1); //destination to unused driver code
+                if((res2ptr - codecptr) & 2)
+                {
+                    *(res2ptr++) = 0xC0;
+                    *(res2ptr++) = 0x46;
+                }
+                
+                printf("Unused function addr: %X\n", (resptr - codecptr) + addroffs);
+                
+                // destination to baked trainer init code (in 3xxxxx region, runonce)
+                uint32_t absaddr = (((resptr - codecptr) + 0x300000) & ~1);
                 
                 uint32_t toffs = (absaddr - (((res2ptr - codecptr) + addroffs) + 4)) & ~1; //offset from current address
                 
@@ -506,22 +548,10 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 
                 printf("%02X %02X %02X %02X\n", res2ptr[-4 + 0], res2ptr[-4 + 1], res2ptr[-4 + 2], res2ptr[-4 + 3]);
                 
-                //shitty old method
-                
-                // LDR && BLX PC
-                /**(res2ptr++) = 0x00;
-                *(res2ptr++) = 0x49;
-                *(res2ptr++) = 0x88;
-                *(res2ptr++) = 0x47;
-                
-                *(res2ptr++) = absaddr | 1;
-                *(res2ptr++) = absaddr >> 8;
-                *(res2ptr++) = absaddr >> 16;
-                *(res2ptr++) = absaddr >> 24;
-                */
-                
+                // [0] - total hole usage
+                // [1] - offset from hole start to trainer code (per-frame)
                 size_t copyret[2];
-                copyret[1] = 0;
+                copyret[1] = 0; // has to be initialized!
                 
                 // do not clear PAT_RELOC because it's cleared below
                 mask &= ~(pat_copyhole(resptr, sets, patmask, copyret) & ~(PAT_RELOC)); //TODO: check out size
@@ -529,14 +559,15 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 if(addroffs)
                 {
                     // == find dummy error code return function called from MainLoop
-                    res2ptr = memesearch(
+                    // == [ OBSOLETE ] ==
+                    /*res2ptr = memesearch(
                         //same for both AGBG and TwlBg
                         (const uint8_t[]){0x00, 0x48, 0x70, 0x47, 0x00, 0x38, 0x40, 0xC9},
                         0, codecptr, codecsize, 8
-                    );
+                    );*/
                     
                     // == find MainLoop function
-                    resptr = !agbg ?
+                    res2ptr = !agbg ?
                         memesearch
                         (
                             // ???
@@ -554,72 +585,56 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         )
                     ;
                     
-                    if(res2ptr && resptr)
+                    if(res2ptr)
                     {
                         // the function is below the consts the memesearch is for
-                        resptr += 0x10;
+                        res2ptr += 0x10;
                         if(!agbg)
-                            resptr += 6; // 0x16
+                            res2ptr += 6; // 0x16
                         
-                        printf("Frame hook function %X %X %08X\n", res2ptr, res2ptr - codecptr, res2ptr-codecptr+addroffs);
-                        printf("Frame hook patch    %X %X %08X\n", resptr, resptr - codecptr, resptr-codecptr+addroffs);
+                        printf("Frame hook patch    %08X\n", res2ptr-codecptr+addroffs);
                         
                         // MOV(S) r0, #0 around the BL
-                        resptr[0] = 0x00;
-                        resptr[1] = 0x20;
+                        res2ptr[0] = 0x00;
+                        res2ptr[1] = 0x20;
                         
-                        resptr[2] = 0x00;
-                        resptr[3] = 0x20;
-                        resptr[4] = 0x00;
-                        resptr[5] = 0x20;
+                        res2ptr[2] = 0x00;
+                        res2ptr[3] = 0x20;
+                        res2ptr[4] = 0x00;
+                        res2ptr[5] = 0x20;
                         
-                        resptr[6] = 0x00;
-                        resptr[7] = 0x20;
-                        resptr[8] = 0x00;
-                        resptr[9] = 0x20;
+                        res2ptr[6] = 0x00;
+                        res2ptr[7] = 0x20;
+                        res2ptr[8] = 0x00;
+                        res2ptr[9] = 0x20;
                         
-                        res2ptr = resptr;
-                        
-                        if((res2ptr - codecptr) & 3) //must be 4-aligned for Thumb ADR
+                        if((res2ptr - codecptr) & 3)
                         {
                             *(res2ptr++) = 0xC0;
                             *(res2ptr++) = 0x46;
                             printf("Aligned code to %X\n", res2ptr-codecptr+addroffs);
                         }
                         
-                        //absaddr -= 0x300000;
-                        //absaddr += codecptr;
-                        //absaddr += copyret[1];
-                        
-                        absaddr = 0x130000;
+                        // Call the baked trainer code each frame (from the 1xxxxx region, non-relocated)
+                        absaddr = (size_t)((resptr - codecptr) + addroffs + copyret[1]) & 0xFFFFFFFF; //PAT_HOLE_ADDR;
                         
                         uint32_t toffs = (absaddr - (((res2ptr - codecptr) + addroffs) + 4)) & ~1;
+                        
+                        printf("from: %X to: %X diff: %X\n", (res2ptr - codecptr) + addroffs, absaddr, toffs);
                         
                         *(res2ptr++) = (uint8_t)(toffs >> 12);
                         *(res2ptr++) = (uint8_t)(((toffs >> 20) & 7) | 0xF0);
                         *(res2ptr++) = (uint8_t)(toffs >> 1);
                         *(res2ptr++) = (uint8_t)(((toffs >> 9) & 7) | 0xF8);
                         
-                        
-                        /**(res2ptr++) = 0x00;
-                        *(res2ptr++) = 0x49;
-                        *(res2ptr++) = 0x88;
-                        *(res2ptr++) = 0x47;
-                        
-                        //absaddr = 0x200000; // is Thumb
-                        
-                        *(res2ptr++) = absaddr | 1;
-                        *(res2ptr++) = absaddr >> 8;
-                        *(res2ptr++) = absaddr >> 16;
-                        *(res2ptr++) = absaddr >> 24;
-                        */
+                        printf("%02X %02X %02X %02X\n", res2ptr[-4 + 0], res2ptr[-4 + 1], res2ptr[-4 + 2], res2ptr[-4 + 3]);
                         
                         mask &= ~PAT_RELOC;
                         
-                        resptr = memesearch(
-                            (const uint8_t[]){0x03, 0x21, 0x1F, 0x20, 0x49, 0x05, 0x00, 0x06},
-                            0, codecptr, codecsize,
-                            8
+                        // ==[ DO NOT USE ]==
+                        /*resptr = memesearch(
+                            (const uint8_t[]){0x03, 0x21, 0x1F, 0x20, 0x49, 0x05, 0x00, 0x06, 0x10, 0xB5},
+                            0, codecptr, codecsize, 10
                         );
                         if(resptr)
                         {
@@ -629,7 +644,11 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                             resptr[1] = 0x47;
                             resptr[2] = 0x70;
                             resptr[3] = 0x47;
-                        }
+                            resptr[4] = 0x70;
+                            resptr[5] = 0x47;
+                            resptr[6] = 0x70;
+                            resptr[7] = 0x47;
+                        }*/
                     }
                 }
                 else
