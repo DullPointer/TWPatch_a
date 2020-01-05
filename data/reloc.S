@@ -6,8 +6,11 @@
 
 PUSH {r4, r5}
 
+; 130000
 MOV r0, #0x13
 LSL r0, #16
+SUB r0, #0xFF
+SUB r0, #1
 
 LDR r2, [PC, #((copylen - . - 2) & ~3)]
 ADD r1, PC, #(payload_end - . - 2 + 4) & ~3
@@ -27,6 +30,14 @@ POP {r4, r5}
 MOV r1, r2
 SWI 0x7A
 
+
+/*LDR r0, [PC, #((copylen - . - 2) & ~3)]
+ADD r1, PC, #(payload_end - . - 2 + 4) & ~3
+ADD r1, r0
+MOV r0, #1
+ORR r1, r0
+BX r1
+*/
 B payload_end
 
 .align	4

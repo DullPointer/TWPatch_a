@@ -22,12 +22,14 @@ int agbg = 0;
 
 static void* LoadSection0(size_t* outsize)
 {
+    // path to /title/00040138/?0000?02/*.app!exefs.bin
     u32 apath[4];
     apath[0] = 0x20000002 | (1 << (8 | agbg));
     apath[1] = 0x00040138;
     apath[2] = 0;
     apath[3] = 0;
     
+    // path to sub-file in exefs.bin
     char fpath[20];
     memset(fpath, 0, sizeof(fpath));
     fpath[ 8] = 2;
@@ -89,6 +91,7 @@ static void* LoadSection0(size_t* outsize)
             return 0;
         }
         
+        // ^D code slide
         if(fread(buf, 0x200, 1, f) == 1 && *(const uint32_t*)(buf + 0x100) == *(const uint32_t*)"NCCH") goto nasd;
         if(fread(buf, 0x200, 1, f) == 1 && *(const uint32_t*)(buf + 0x100) == *(const uint32_t*)"NCCH") goto nasd;
         if(fread(buf, 0x200, 1, f) == 1 && *(const uint32_t*)(buf + 0x100) == *(const uint32_t*)"NCCH") goto nasd;
@@ -104,6 +107,7 @@ static void* LoadSection0(size_t* outsize)
         
         nasd:
         
+        // pNCCH->SizeInBlocks * 512 // 512 is block size
         codesize = *(const uint32_t*)(buf + 0x104) << 9;
         ret = malloc((codesize + 0x1FF) & ~0x1FF);
         if(!ret)
@@ -115,6 +119,7 @@ static void* LoadSection0(size_t* outsize)
         
         memcpy(ret, buf, 0x200);
         
+        // name always seems to be located at pNCCH + 1
         if(fread(buf, 0x200, 1, f) != 1 || *(const uint64_t*)buf != *(const uint64_t*)"TwlBg\0\0")
         {
             puts("/luma/section0.bin is not TwlBg");
@@ -193,6 +198,7 @@ static void* LoadSection0(size_t* outsize)
     
     //memcpy(ret, buf, 0x200);
     
+    // EOR testing for both TwlBg and AgbBg
     if((*(const uint64_t*)(ret + offs + 0x200) ^ *(const uint64_t*)"TwlBg\0\0") & ~0xE1015)
     {
         //puts("NCCH in FIRM is not TwlBg");
@@ -235,6 +241,7 @@ static void* LoadSection0(size_t* outsize)
 
 #include "krnlist_all.h"
 
+// I don't know of a faster way, but this is also used for rotating
 static inline void putpixel(uint32_t* fb, uint32_t px, uint32_t x, uint32_t y)
 {
     fb[(x * 240) + (239 - y)] = __builtin_bswap32(px);
@@ -428,11 +435,11 @@ int main()
     
     puts("Hello, please wait while loading");
     
-    textfb = malloc(400 * 240 * 2);
+    textfb = malloc(240 * 400 * 2);
     menucon.frameBuffer = textfb;
     
     if(svcGetSystemTick() & 1)
-        fwrite(dummy_bin, dummy_bin_size, 1, stdout);
+        fwrite(dummy_bin, dummy_bin_size, 1, stderr);
     
     memset(&kernel, 0, sizeof(kernel));
     
