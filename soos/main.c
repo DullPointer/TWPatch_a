@@ -25,7 +25,7 @@
 // I don't know of a faster way, but this is also used for rotating
 static inline void putpixel(uint32_t* fb, uint32_t px, uint32_t x, uint32_t y)
 {
-    fb[(x * 240) + (239 - y)] = __builtin_bswap32(px);
+    fb[(y * 240) + x] = px;
 }
 
 static uint32_t* fbTop = 0;
@@ -59,80 +59,70 @@ static __attribute__((optimize("Ofast"))) void DoOverlay()
         {
             uint32_t* krnres;
             
-            krnres = (uint32_t*)krn_calc(resosptr, 0, 256, 192, 0, 0, &kernel, &kernel, ~0);
-            for(i = 0; i != 320; i++)
-                for(j = 0; j != 240; j++)
-                    putpixel(fbTop, krnres[(j << 9) + i], i + 40, j);
+            krnres = (uint32_t*)krn_calc(resosptr, 0, 192, 256, 0, 0, &kernel, &kernel, ~0);
+            memcpy(fbTop + (40 * 240), krnres, 240 * 320 * 4);
             
-            krnres = (uint32_t*)krn_calc(resosptr + (256 * 192), 0, 256, 192, 0, 0, &kernel, &kernel, ~0);
+            krnres = (uint32_t*)krn_calc(resosptr + (192 * 256), 0, 192, 256, 0, 0, &kernel, &kernel, ~0);
             if(overlaytimer && textfb)
             {
-                k = 0;
-                for(i = 0; i != 320; i++)
-                    for(j = 0; j != 240; j++)
+                for(k = 0; k != (240 * 320); k++)
+                {
+                    if(textfb[k] && k >= 240)
                     {
-                        //putpixel(fbBot, (krnres[(j << 9) + i] & 0xFCFCFCFC) >> 2, i, j);
+                        const uint32_t outlinepx = 0;
                         
-                        if(!textfb[k] || !i || i == 319)
+                        if(!textfb[k - 240])
                         {
-                            fbBot[k++] = __builtin_bswap32((krnres[((239 - j) << 9) + i] & 0xFCFCFCFC) >> 2);
-                            continue;
+                            //fbTop[k - 240] = outlinepx;
+                            fbBot[k - 240] = outlinepx;
                         }
-                        else
+                        if(!textfb[k - 1])
                         {
-                            const uint32_t outlinepx = 0;
-                            
-                            if(!textfb[k - 240])
-                            {
-                                //fbTop[k - 240] = outlinepx;
-                                fbBot[k - 240] = outlinepx;
-                            }
-                            if(!textfb[k - 1])
-                            {
-                                //fbTop[k - 1] = outlinepx;
-                                fbBot[k - 1] = outlinepx;
-                            }
-                            if(!textfb[k + 1])
-                            {
-                                //fbTop[k + 1] = outlinepx;
-                                fbBot[k + 1] = outlinepx;
-                            }
-                            if(!textfb[k + 240])
-                            {
-                                //fbTop[k + 240] = outlinepx;
-                                fbBot[k + 240] = outlinepx;
-                            }
-                            
-                            fbBot[k++] = ~0;
-                            continue;
+                            //fbTop[k - 1] = outlinepx;
+                            fbBot[k - 1] = outlinepx;
                         }
+                        if(!textfb[k + 1])
+                        {
+                            //fbTop[k + 1] = outlinepx;
+                            fbBot[k + 1] = outlinepx;
+                        }
+                        if(!textfb[k + 240])
+                        {
+                            //fbTop[k + 240] = outlinepx;
+                            fbBot[k + 240] = outlinepx;
+                        }
+                        
+                        fbBot[k] = ~0;
+                        continue;
                     }
+                    else
+                    {
+                        fbBot[k] = (krnres[k] & 0xFCFCFCFC) >> 2;
+                        continue;
+                    }
+                }
                 return;
             }
             else
             {
-                for(i = 0; i != 320; i++)
-                    for(j = 0; j != 240; j++)
-                        putpixel(fbBot, krnres[(j << 9) + i], i, j);
+                memcpy(fbBot, krnres, 240 * 320 * 4);
             }
         }
         else
         {
-            for(j = 0; j != 192; j++)
-                for(i = 0; i != 256; i++)
-                    putpixel(fbTop, resosptr[k++], i + 72, j + 48);
+            for(i = 0; i != 256; i++, k+= 192)
+                memcpy(fbTop + (240 * (72 + i)), resosptr + k, 192 * 4);
             
             if(overlaytimer)
             {
-                for(j = 0; j != 192; j++)
-                    for(i = 0; i != 256; i++)
-                        putpixel(fbBot, (resosptr[k++] & 0xFCFCFCFC) >> 2, i + 32, j);
+                for(j = 0; j != 256; j++)
+                    for(i = 0; i != 192; i++)
+                        putpixel(fbBot, (resosptr[k++] & 0xFCFCFCFC) >> 2, i + 48, j + 72);
             }
             else
             {
-                for(j = 0; j != 192; j++)
-                    for(i = 0; i != 256; i++)
-                        putpixel(fbBot, resosptr[k++], i + 32, j);
+                for(i = 0; i != 256; i++, k+= 192)
+                    memcpy(fbBot + 48 + (240 * i), resosptr + k, 192 * 4);
             }
         }
     }
