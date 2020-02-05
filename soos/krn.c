@@ -16,7 +16,7 @@ static inline int count_bits(int value, int mask)
     return ret;
 }
 
-void  __attribute__((optimize("Ofast"))) krn_cvt(struct krn_kernel* krn, const s16* krndata, u32 krnx, u32 krnbits)
+void  __attribute__((optimize("Os"))) krn_cvt(struct krn_kernel* krn, const s16* krndata, u32 krnx, u32 krnbits)
 {
     memset(krn->matrix, 0, sizeof(krn->matrix));
     
@@ -50,7 +50,7 @@ static inline __attribute__((optimize("Ofast"))) u32 do_fifo_mult(const u32* fif
     return ret;
 }
 
-static __attribute__((optimize("Ofast"))) void do_matrix_line(const u32* bufin, u32* bufout, u32 size, const struct krn_kernel* krn)
+static __attribute__((optimize("Os"))) void do_matrix_line(const u32* bufin, u32* bufout, u32 size, const struct krn_kernel* krn)
 {
     u32 offs = 2;
     u32 fifo[6];
@@ -93,7 +93,7 @@ static __attribute__((optimize("Ofast"))) void do_matrix_line(const u32* bufin, 
 }
 
 static __attribute__((optimize("Os"))) void do_matrix_raw(const u32* bufin, u32* bufout, u32 width, u32 height, u32 origwidth, u32 origheight,
-    const struct krn_kernel* kernelx, const struct krn_kernel* kernely)
+    const struct krn_kernel* kernelx, const struct krn_kernel* kernely, u32 outstride)
 {
     u32 templine1[512];
     u32 templine2[512];
@@ -101,17 +101,17 @@ static __attribute__((optimize("Os"))) void do_matrix_raw(const u32* bufin, u32*
     for(i = 0; i != origheight; i++)
     {
         //printf("do_matrix_line x %i\n", i);
-        do_matrix_line(bufin + (i * origwidth), bufout + (i << 9), width - 1, kernelx);
+        do_matrix_line(bufin + (i * origwidth), bufout + (i * outstride), width - 1, kernelx);
     }
     for(i = 0; i != width; i++)
     {
         //printf("do_matrix_line y %i\n", i);
         
-        for(j = 0; j != height; j++)
-            templine1[j] = bufout[(j << 9) | i];
+        for(j = 0; j != origheight; j++)
+            templine1[j] = bufout[(j * outstride) + i];
         do_matrix_line(templine1, templine2, height - 1, kernely);
         for(j = 0; j != height; j++)
-            bufout[(j << 9) | i] = templine2[j];
+            bufout[(j * outstride) + i] = templine2[j];
     }
 }
 
@@ -137,19 +137,17 @@ size_t __attribute__((optimize("Os"))) krn_calc(const void* bufin, void* bufout,
     if(!bufout && !outstride) //size check only
         return 1;
     
+    if(!~outstride)
+        outstride = calcwidth << 2;
+    
     if(!hwbuf)
         hwbuf = malloc(512 * 512 * 4);
-    do_matrix_raw(bufin, hwbuf, calcwidth, calcheight, inwidth, inheight, krnx, krny);
+    do_matrix_raw(bufin, hwbuf, calcwidth, calcheight, inwidth, inheight, krnx, krny, outstride >> 2);
     
     if(!bufout)
         return (size_t)hwbuf;
     
-    u32 j;
-    for(j = 0; j != calcheight; j++)
-    {
-        memcpy(bufout, &hwbuf[j << 9], calcwidth * 4);
-        bufout += outstride;
-    }
+    memcpy(bufout, hwbuf, outstride * calcheight);
     
     return 1;
 }
