@@ -40,6 +40,8 @@ static size_t resossize = 0;
 static const uint16_t* textfb = 0;
 static struct krn_kernel kernel;
 
+static uint32_t currscreen = 0;
+
 static __attribute__((optimize("Ofast"))) void DoOverlay()
 {
     uint32_t i, j, k = 0;
@@ -343,120 +345,140 @@ int main()
             continue;
         }
         
-        if(((kHeld | kUp) & KEY_START) && !(kDown & KEY_START))
+        if(!currscreen)
         {
-            consoleSelect(&console);
-            gfxSetScreenFormat(GFX_TOP, GSP_RGB565_OES);
-            gfxSwapBuffers();
-            gfxFlushBuffers();
-            gspWaitForVBlank();
-            
-            puts("Doing patches");
-            
-            uint8_t* resptr = 0;
-            
-            if(currentscale && !agbg)
+            if(((kHeld | kUp) & KEY_START) && !(kDown & KEY_START))
             {
-                resptr = memesearch(scale1, 0, codecptr, codecsize, sizeof(scale1));
-                if(resptr)
+                consoleSelect(&console);
+                gfxSetScreenFormat(GFX_TOP, GSP_RGB565_OES);
+                gfxSwapBuffers();
+                gfxFlushBuffers();
+                gspWaitForVBlank();
+                
+                size_t mask = PAT_HID | PAT_RTCOM;
+                if(kHeld & KEY_X)
                 {
-                    //printf("memesearch %08X %08X %X\n", codecptr, resptr, resptr - codecptr);
-                    puts("Doing kernel swap");
-                    
-                    memcpy(resptr, scalelist1[currentscale].ptr, sizeof(scale1));
+                    puts("Widescreen patches enabled!\n");
+                    mask |= PAT_WIDE;
                 }
-                else
+                if(kHeld & KEY_Y)
                 {
-                    puts("Kernel swap failed :(");
+                    puts("rtcom is disabled, which can");
+                    puts(" lead to instability\n");
+                    mask &= ~PAT_RTCOM;
                 }
-            }
-            
-            color_setting_t settest;
-            settest.temperature = 3200;
-            settest.gamma[0] = 1.0F;
-            settest.gamma[1] = 1.0F;
-            settest.gamma[2] = 1.0F;
-            settest.brightness = 1.0F;
-            pat_apply(codecptr, codecsize, &settest, ~0 & ~PAT_REDSHIFT);
-            
-            puts("Compressing... this will take a year or two");
-            
-            size_t outsize = ((*codesizeptr) + 0x1FF) & ~0x1FF;
-            *codesizeptr = outsize;
-            
-            size_t lzres = (kHeld & KEY_R) ? ~0 : lzss_enc(codecptr, codeptr, codecsize, outsize);
-            if(~lzres)
-            {
-                puts("Writing file to disk");
-                mkdir("/luma", 0777);
-                mkdir("/luma/sysmodules", 0777);
-                char fnbuf[] = "/luma/sysmodules/TwlBg.cxi\0";
-                if(agbg)
-                    *(u32*)(fnbuf + 16) ^= 0xE101500;
-                printf("fnbuf: %s\n", fnbuf);
-                FILE* f = fopen(fnbuf, "wb");
-                if(f)
+                
+                puts("\nDoing patches\n");
+                
+                uint8_t* resptr = 0;
+                
+                if(currentscale && !agbg)
                 {
-                    if(fwrite(mirf, mirfsize, 1, f) == 1)
+                    resptr = memesearch(scale1, 0, codecptr, codecsize, sizeof(scale1));
+                    if(resptr)
                     {
-                        fflush(f);
-                        fclose(f);
-                        puts("Patched TwlBg, ready to use!");
+                        //printf("memesearch %08X %08X %X\n", codecptr, resptr, resptr - codecptr);
+                        puts("Doing kernel swap");
+                        
+                        memcpy(resptr, scalelist1[currentscale].ptr, sizeof(scale1));
                     }
                     else
                     {
-                        fclose(f);
-                        puts("Failed to write TwlBg.cxi to disk :/");
+                        puts("Kernel swap failed :(");
+                    }
+                }
+                
+                color_setting_t settest;
+                settest.temperature = 3200;
+                settest.gamma[0] = 1.0F;
+                settest.gamma[1] = 1.0F;
+                settest.gamma[2] = 1.0F;
+                settest.brightness = 1.0F;
+                pat_apply(codecptr, codecsize, &settest, mask);
+                
+                puts("Compressing... this will take a year or two");
+                
+                size_t outsize = ((*codesizeptr) + 0x1FF) & ~0x1FF;
+                *codesizeptr = outsize;
+                
+                size_t lzres = (kHeld & KEY_R) ? ~0 : lzss_enc(codecptr, codeptr, codecsize, outsize);
+                if(~lzres)
+                {
+                    puts("Writing file to disk");
+                    mkdir("/luma", 0777);
+                    mkdir("/luma/sysmodules", 0777);
+                    char fnbuf[] = "/luma/sysmodules/TwlBg.cxi\0";
+                    if(agbg)
+                        *(u32*)(fnbuf + 16) ^= 0xE101500;
+                    printf("fnbuf: %s\n", fnbuf);
+                    FILE* f = fopen(fnbuf, "wb");
+                    if(f)
+                    {
+                        if(fwrite(mirf, mirfsize, 1, f) == 1)
+                        {
+                            fflush(f);
+                            fclose(f);
+                            puts("Patched TwlBg, ready to use!");
+                        }
+                        else
+                        {
+                            fclose(f);
+                            puts("Failed to write TwlBg.cxi to disk :/");
+                        }
+                    }
+                    else
+                    {
+                        puts("Can't write TwlBg.cxi to disk...");
+                        puts(" FAIL ");
                     }
                 }
                 else
                 {
-                    puts("Can't write TwlBg.cxi to disk...");
-                    puts(" FAIL ");
+                    puts("Failed to compress...");
+                    puts("  Something went terribly wrong :/");
+                }
+                
+                mirf = 0;
+                
+                puts("\n\nHold SELECT to exit");
+                
+                continue;
+            }
+            
+            if(overlaytimer)
+            {
+                if(kDown & KEY_DOWN)
+                {
+                    if(!scalelist1[++currentscale].ptr)
+                    {
+                        while(scalelist1[--currentscale - 1].ptr)
+                            /**/;
+                    }
+                    
+                    if(!agbg)
+                        krn_cvt(&kernel, scalelist1[currentscale].ptr, 5, 15);
+                    else
+                        krn_cvt(&kernel, scalelist1[currentscale].ptr, 6, 27);
+                }
+                
+                if(kDown & KEY_UP)
+                {
+                    if(!scalelist1[--currentscale].ptr)
+                    {
+                        while(scalelist1[++currentscale + 1].ptr)
+                            /**/;
+                    }
+                    
+                    if(!agbg)
+                        krn_cvt(&kernel, scalelist1[currentscale].ptr, 5, 15);
+                    else
+                        krn_cvt(&kernel, scalelist1[currentscale].ptr, 6, 27);
                 }
             }
-            else
-            {
-                puts("Failed to compress...");
-                puts("  Something went terribly wrong :/");
-            }
-            
-            mirf = 0;
-            
-            puts("\n\nHold SELECT to exit");
-            
-            continue;
         }
-        
-        if(overlaytimer)
+        else
         {
-            if(kDown & KEY_DOWN)
-            {
-                if(!scalelist1[++currentscale].ptr)
-                {
-                    while(scalelist1[--currentscale - 1].ptr)
-                        /**/;
-                }
-                
-                if(!agbg)
-                    krn_cvt(&kernel, scalelist1[currentscale].ptr, 5, 15);
-                else
-                    krn_cvt(&kernel, scalelist1[currentscale].ptr, 6, 27);
-            }
-            
-            if(kDown & KEY_UP)
-            {
-                if(!scalelist1[--currentscale].ptr)
-                {
-                    while(scalelist1[++currentscale + 1].ptr)
-                        /**/;
-                }
-                
-                if(!agbg)
-                    krn_cvt(&kernel, scalelist1[currentscale].ptr, 5, 15);
-                else
-                    krn_cvt(&kernel, scalelist1[currentscale].ptr, 6, 27);
-            }
+            currscreen = 0;
         }
         
         if(kDown & KEY_X)
@@ -480,7 +502,7 @@ int main()
                 krn_cvt(&kernel, scalelist1[currentscale].ptr, 6, 27);
         }
         
-        if((kHeld & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT | KEY_START))
+        if(currscreen || (kHeld & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT | KEY_START))
         || ((kUp | kDown) & (KEY_A | KEY_B))
         )
             overlaytimer = 96;
@@ -495,45 +517,52 @@ int main()
         
         puts("TWPatch by Sono (build " DATETIME ")\n");
         
-        
-        puts("Scale list:");
-        
-        do
+        if(!currscreen)
         {
-            size_t iter = 1;
-            
-            if(agbg)
-            {
-                while(scalelist1[iter++].ptr)
-                    /**/;
-            }
+            puts("Scale list:");
             
             do
             {
-                printf("%c - %s\n", iter == currentscale ? '>' : ' ', scalelist1[iter].name);
-                ++iter;
+                size_t iter = 1;
+                
+                if(agbg)
+                {
+                    while(scalelist1[iter++].ptr)
+                        /**/;
+                }
+                
+                do
+                {
+                    printf("%c - %s\n", iter == currentscale ? '>' : ' ', scalelist1[iter].name);
+                    ++iter;
+                }
+                while(scalelist1[iter].name || scalelist1[iter].ptr);
             }
-            while(scalelist1[iter].name || scalelist1[iter].ptr);
+            while(0);
+            
+            puts("\nHold X to see the original pattern");
+            puts("\n  The UI is very slow, so hold the");
+            puts("    button for at least 1 second!");
+            puts("\n Hold START to save and exit");
+            puts("      + X to enable widescreen");
+            //puts("      + Y to disable rtcom");
+            puts("\n Hold SELECT to just exit");
+            
+            if(kDown & KEY_START)
+            {
+                menucon.cursorX = 0;
+                menucon.cursorY = 1;
+                
+                size_t iter = 28;
+                
+                do
+                    puts("Compression takes forever\e[K");
+                while(--iter);
+            }
         }
-        while(0);
-        
-        puts("\nHold X for one second to switch between");
-        puts("  Nintendo scaling and current scaling");
-        puts("\n  The UI is very slow, so hold the");
-        puts("    button for at least 1 second!");
-        puts("\n\n Hold START to save and exit");
-        puts(" Hold SELECT to just exit");
-        
-        if(kDown & KEY_START)
+        else
         {
-            menucon.cursorX = 0;
-            menucon.cursorY = 1;
-            
-            size_t iter = 28;
-            
-            do
-                puts("Compression takes forever\e[K");
-            while(--iter);
+            puts("lol");
         }
         
         // end print menu

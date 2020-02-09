@@ -445,7 +445,8 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     
                     resptr[8] = 0xA2; // skip one instruction
                     
-                    mask &= ~PAT_WIDE;
+                    // Do not clear the mask here, as extra patches are needed below
+                    //mask &= ~PAT_WIDE;
                 }
             }
             else
@@ -461,7 +462,8 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     //resptr[2] += (400 - 360);
                     resptr[4] += (400 - 360);
                     
-                    mask &= ~PAT_WIDE;
+                    // Do not clear wide patch here
+                    //mask &= ~PAT_WIDE;
                 }
             }
         }
@@ -555,13 +557,19 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         *(res2ptr++) = 0x46;
                     }
                     
+                    if((resptr - codecptr) & 2)
+                    {
+                        *(resptr++) = 0xC0;
+                        *(resptr++) = 0x46;
+                    }
+                    
                     // [0] - total hole usage
                     // [1] - offset from hole start to trainer code (per-frame)
                     size_t copyret[2];
                     copyret[1] = 0; // has to be initialized!
                     
                     // do not clear PAT_RELOC because it's cleared below
-                    mask &= pat_copyholerunonce(resptr, 0, mask & ~PAT_RELOC, copyret) & ~PAT_RELOC;
+                    mask &= pat_copyholerunonce(resptr, sets, mask & ~PAT_RELOC, copyret) & ~PAT_RELOC;
                     
                     uint32_t sraddr = (res2ptr - codecptr) + addroffs;
                     uint32_t toaddr = (resptr - codecptr) + 0x300000;
