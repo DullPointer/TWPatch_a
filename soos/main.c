@@ -490,6 +490,33 @@ int main()
                     mask &= ~PAT_RTCOM;
                 }
                 
+                puts("\nEnabled patches:");
+                
+                if(mask & PAT_REDSHIFT)
+                    puts("- CTR_Redshift");
+                if(mask & PAT_HOLE)
+                    puts("- Debug trainer");
+                if(mask & PAT_RELOC)
+                    puts("- <null>");
+                if(mask & PAT_WIDE)
+                    puts("- DMPGL");
+                if(mask & PAT_HID)
+                    puts("- DPAD LR patch");
+                if(mask & PAT_UNSTART)
+                    puts("- Un-START");
+                if(mask & PAT_RTCOM)
+                    puts("- rtcom");
+                if(mask & PAT_DEBUG)
+                    puts("- ???");
+                if(mask & PAT_GPUSCALING)
+                    puts("- ScaleTest");
+                if(mask & PAT_EHANDLER)
+                    puts("- kAXI EHANDLER kTLS");
+                if(mask & PAT_SQUISH)
+                    puts("- ScanDouble (SQUISH)");
+                if(mask & PAT_ANTIWEAR)
+                    puts("- antiwear");
+                
                 puts("\nDoing patches\n");
                 
                 uint8_t* resptr = 0;
