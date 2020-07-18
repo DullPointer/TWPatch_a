@@ -11,6 +11,8 @@
 
 #include "soos/common_main.h"
 
+size_t lzss_enc2(const void* __restrict in, void* __restrict out, size_t insize, size_t outsize);
+
 int main(int argc, char** argv)
 {
     size_t pat = PAT_HID | PAT_RTCOM;
@@ -87,7 +89,7 @@ int main(int argc, char** argv)
     size_t outsize = ((*codesizeptr) + 0x1FF) & ~0x1FF;
     *codesizeptr = outsize;
     
-    size_t lzres = lzss_enc(codecptr, codeptr, codecsize, outsize);
+    size_t lzres = lzss_enc2(codecptr, codeptr, codecsize, outsize);
     if(~lzres)
     {
         puts("Writing file to disk");

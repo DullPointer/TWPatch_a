@@ -285,6 +285,8 @@ static struct
 static size_t currpat = 0;
 static size_t patmask = 0;
 
+size_t lzss_enc2(const void* __restrict in, void* __restrict out, size_t insize, size_t outsize);
+
 int main()
 {
     gfxInit(GSP_RGBA8_OES, GSP_RGBA8_OES, false);
@@ -507,9 +509,14 @@ int main()
                 size_t outsize = ((*codesizeptr) + 0x1FF) & ~0x1FF;
                 *codesizeptr = outsize;
                 
-                size_t lzres = (kHeld & KEY_R) ? ~0 : lzss_enc(codecptr, codeptr, codecsize, outsize);
+                u64 start = svcGetSystemTick();
+                
+                size_t lzres = (kHeld & KEY_R) ? ~0 : lzss_enc2(codecptr, codeptr, codecsize, outsize);
                 if(~lzres)
                 {
+                    start = ((svcGetSystemTick() - start) >> 4) / 16756991;
+                    printf("Took %llum%llus\n", start / 60, start % 60);
+                    
                     puts("Writing file to disk");
                     mkdir("/luma", 0777);
                     mkdir("/luma/sysmodules", 0777);
