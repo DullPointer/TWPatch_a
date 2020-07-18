@@ -433,24 +433,68 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     // 1) there are no conditional bits in Thumb
     // 2) only a single bit flip is required :)
     
-	if(patmask & PAT_UNSTART)
-	{
-		resptr = memesearch(
+    if(patmask & (PAT_UNSTART | PAT_ANTIWEAR))
+    {
+        resptr = memesearch(
             (const uint8_t[]){0x00, 0x88, 0xC0, 0x43, 0x00, 0x07, 0x80, 0x0F},
             0, codecptr, codecsize, 8);
         
         if(resptr)
         {
-            puts("Flipping un-START bit :)");
+            if(patmask & PAT_ANTIWEAR)
+            {
+                puts("Flipping un-START regs");
+                
+                resptr[0] |= 7;
+                resptr[2] |= 7 << 3;
+            }
             
-            // Turn MVN(S) into CMN (basically no-op in the given context)
-            resptr[3] ^= 0b1; // :)
-            
-            mask &= ~PAT_UNSTART;
+            if(patmask & PAT_UNSTART)
+            {
+                puts("Flipping un-START bit :)");
+                
+                // Turn MVN(S) into CMN (basically no-op in the given context)
+                resptr[3] ^= 0b1; // :)
+                
+                mask &= ~PAT_UNSTART;
+            }
         }
         else
         {
             puts("Failed to apply un-START patch");
+        }
+    }
+    
+    if((patmask & PAT_ANTIWEAR) && !agbg) // TwlBg-only, AgbBg doesn't touch NVFLASH
+    {
+        resptr = memesearch(
+            (const uint8_t[]){0x04, 0x46, 0x01, 0x20},
+            0, codecptr, codecsize, 4);
+        
+        if(resptr)
+        {
+            puts("Relocating NVFLASH touch scaling test");
+            
+            resptr[0] = 0x24;
+            resptr[1] = 0x78;
+        }
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x28, 0x46, 0x01, 0xF0, 0x18, 0xFB, 0x00, 0x20, 0x20, 0x56},
+            (const uint8_t[]){0x00, 0x00, 0xFF, 0x07, 0xFF, 0x07, 0x00, 0x00, 0x00, 0x00},
+            codecptr, codecsize, 10);
+        
+        if(resptr)
+        {
+            puts("Conditional NVFLASH write test");
+            
+            const int btn = 31 - 10;
+            
+            resptr[6] = 0x3F | (btn << 6);
+            resptr[7] = 0x05 | (btn >> 2);
+            
+            resptr[8] = 0x01;
+            resptr[9] = 0xD4;
         }
     }
     

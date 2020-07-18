@@ -271,6 +271,8 @@ static struct
     {PAT_HOLE, "Hole (obsolete)"},
     {PAT_DEBUG, "???"},
     //{PAT_HOLE | PAT_HID | PAT_UNSTART | PAT_GPUSCALING | (1 << 30), "Ktest"},
+    {(1 << 31) | PAT_RTCOM, "rtcom"},
+    {(1 << 31) | PAT_ANTIWEAR, "Anti-wear"},
     {1 << 30, "* No default patches"},
     {0, 0},
     {PAT_UNSTART, "Un-START"},
@@ -282,6 +284,8 @@ static struct
     {PAT_HOLE, "Hole (obsolete)"},
     {PAT_DEBUG, "???"},
     //{PAT_GPUSCALING | PAT_EHANDLER | PAT_UNSTART | PAT_HID | (1 << 30), "BetterAGB debug"},
+    {(1 << 31) | PAT_RTCOM, "rtcom"},
+    {(1 << 31) | PAT_ANTIWEAR, "Anti-wear"},
     {1 << 30, "* No default patches"},
     {0, 0}
 };
@@ -473,7 +477,7 @@ int main()
                 gfxFlushBuffers();
                 gspWaitForVBlank();
                 
-                size_t mask = (patmask & (1 << 30)) ? (patmask & 0xFFFF) : (PAT_HID | PAT_RTCOM | patmask);
+                size_t mask = (patmask & (1 << 30)) ? (patmask & 0xFFFF) : (PAT_HID | PAT_RTCOM | PAT_ANTIWEAR | patmask);
                 if(kHeld & KEY_X)
                 {
                     puts("Widescreen patches enabled!\n");
