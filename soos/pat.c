@@ -456,7 +456,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     
     // === DMPGL patch for resolution changing
     
-    if(patmask & PAT_WIDE)
+    if(patmask & (PAT_WIDE | PAT_SQUISH))
     {
         // (const uint8_t[]){0xD2, 0x4C, 0x00, 0x26, 0x00, 0x28}, DMA PATCH
         resptr = memesearch
@@ -472,13 +472,54 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         {
             //TODO: experiment with the below two things
             // these values below change the letterbox size
-			
-			puts("Applying wide patch");
             
-            if(!agbg)
-                resptr[2] += (384 - 320); //lol
-            else
-                resptr[2] += (400 - 360);
+            if(!(~patmask & (PAT_SQUISH | PAT_WIDE)))
+            {
+                puts("Applying wide-squish patch");
+                
+                if(!agbg)
+                {
+                    resptr[0] = (384 * 2) >> 8;
+                    
+                    resptr[2] = 0x24;
+                    resptr[3] = 0x02;
+                }
+                else
+                {
+                    resptr[0] = (400 * 2) >> 4;
+                    
+                    resptr[2] = 0x2D;
+                    resptr[3] = 0x01;
+                }
+            }
+            else if(patmask & PAT_WIDE)
+            {
+                puts("Applying wide patch");
+                
+                if(!agbg)
+                    resptr[2] += (384 - 320); //lol
+                else
+                    resptr[2] += (400 - 360);
+            }
+            else // PAT_SQUISH
+            {
+                puts("Applying squish patch");
+                
+                if(!agbg)
+                {
+                    resptr[0] = (320 * 2) >> 8;
+                    
+                    resptr[2] = 0x24;
+                    resptr[3] = 0x02;
+                }
+                else
+                {
+                    resptr[0] = (360 * 2) >> 2;
+                    
+                    resptr[2] = 0xAD;
+                    resptr[3] = 0x00;
+                }
+            }
             
             if(!agbg)
             {
@@ -597,6 +638,41 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 }
             }
         }
+    }
+    
+    if(patmask & PAT_SQUISH)
+    {
+        resptr = memesearch(
+            (const uint8_t[]){0x1B, 0x02, 0xD2, 0x1A},
+            0, codecptr, codecsize, 4);
+        if(resptr)
+        {
+            puts("Thin pixels force mode");
+            
+            resptr[4] = 0xC0;
+            resptr[5] = 0x46;
+            
+            resptr[6] = 0xC0;
+            resptr[7] = 0x46;
+            
+            mask &= ~PAT_SQUISH;
+        }
+        
+        /*resptr = memesearch(
+            (const uint8_t[]){0x80, 0x39, 0xFF, 0x23},
+            0, codecptr, codecsize, 4);
+        if(resptr)
+        {
+            puts("Thin pixels DMPGL");
+            
+            resptr[2] = 0xCB;
+            resptr[3] = 0x00;
+            
+            resptr[10] = 0xE0;
+            resptr[11] = 0x3B;
+            
+            mask &= ~PAT_SQUISH;
+        }*/
     }
     
     if(patmask & PAT_GPUSCALING)
