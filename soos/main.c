@@ -262,6 +262,7 @@ static struct
     const char* label;
 } patlist[] =
 {
+    {PAT_UNSTART, "Un-START"},
     {PAT_REDSHIFT, "Redshift"},
     {PAT_WIDE, "DMPGL Wide test 384x240 16:10"},
     {PAT_GPUSCALING, "GPU scale test (health hazard!)"},
@@ -269,9 +270,10 @@ static struct
     {PAT_HID, "Anti-DPAD"},
     {PAT_HOLE, "Hole (obsolete)"},
     {PAT_DEBUG, "???"},
-    //{PAT_HOLE | PAT_HID | PAT_GPUSCALING | (1 << 30), "Ktest"},
+    //{PAT_HOLE | PAT_HID | PAT_UNSTART | PAT_GPUSCALING | (1 << 30), "Ktest"},
     {1 << 30, "* No default patches"},
     {0, 0},
+    {PAT_UNSTART, "Un-START"},
     {PAT_REDSHIFT, "Redshift"},
     {PAT_WIDE, "DMPGL Wide test 400x240 15:9"},
     {PAT_GPUSCALING, "GPU scale test (health hazard!)"},
@@ -279,7 +281,7 @@ static struct
     {PAT_HID, "Anti-DPAD"},
     {PAT_HOLE, "Hole (obsolete)"},
     {PAT_DEBUG, "???"},
-    //{PAT_GPUSCALING | PAT_EHANDLER | PAT_HID | (1 << 30), "BetterAGB debug"},
+    //{PAT_GPUSCALING | PAT_EHANDLER | PAT_UNSTART | PAT_HID | (1 << 30), "BetterAGB debug"},
     {1 << 30, "* No default patches"},
     {0, 0}
 };

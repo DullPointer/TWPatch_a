@@ -7,6 +7,7 @@
 #define PAT_RELOC       (1 << 2)
 #define PAT_WIDE        (1 << 3)
 #define PAT_HID         (1 << 4)
+#define PAT_UNSTART     (1 << 5)
 #define PAT_RTCOM       (1 << 6)
 #define PAT_DEBUG       (1 << 7)
 #define PAT_GPUSCALING  (1 << 8)

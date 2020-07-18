@@ -427,6 +427,33 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         }
     }
     
+    // === Flip "START or SELECT to disable upscaling" to "START and SELECT to enable upscaling"
+    
+    //Personal note: I was wrong about the 4bit patch on two points:
+    // 1) there are no conditional bits in Thumb
+    // 2) only a single bit flip is required :)
+    
+	if(patmask & PAT_UNSTART)
+	{
+		resptr = memesearch(
+            (const uint8_t[]){0x00, 0x88, 0xC0, 0x43, 0x00, 0x07, 0x80, 0x0F},
+            0, codecptr, codecsize, 8);
+        
+        if(resptr)
+        {
+            puts("Flipping un-START bit :)");
+            
+            // Turn MVN(S) into CMN (basically no-op in the given context)
+            resptr[3] ^= 0b1; // :)
+            
+            mask &= ~PAT_UNSTART;
+        }
+        else
+        {
+            puts("Failed to apply un-START patch");
+        }
+    }
+    
     // === DMPGL patch for resolution changing
     
     if(patmask & PAT_WIDE)
