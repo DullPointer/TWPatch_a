@@ -5,14 +5,11 @@
 	mov	r3, #0
 	mov	r4, r1
 	sub	sp, sp, #20
-	mov	r5, #128
+	mov	r5, #0
 	str	r0, [sp, #4]
 	mov	r7, #1
 	mov	r0, r3
 	add	r4, #252
-	str	r3, [r1]
-	lsl	r5, r5, #1
-	str	r3, [r4, #4]
 	str	r4, [sp, #12]
 .L2:
 	mov	r2, #0
@@ -46,11 +43,15 @@
 	cmp	r2, #24
 	bne	.L7
 	ldr	r2, [sp, #12]
-	sub	r5, r5, #1
+    str r5, [r1, #0]
 	str	r0, [r1, #4]
+    str r5, [r2, #4]
 	str	r0, [r2, #8]
-	cmp	r5, #0
-	bne	.L2
+	cmp	r5, #0xFF
+	beq	.oof
+	add	r5, #1
+    b .L2
+.oof:
 	add	sp, sp, #20
 	;@ sp needed
     mov r0, r3
