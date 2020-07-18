@@ -455,29 +455,101 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
             
             if(!agbg)
             {
-                // == ??? TODO document
-                resptr = memesearch(
-                    (const uint8_t[]){0x00, 0x2A, 0x04, 0xD0, 0x23, 0x61, 0xA1, 0x80, 0xA1, 0x60},
-                    0, codecptr, codecsize, 10);
-                if(resptr)
+                if(patmask & PAT_GPUSCALING)
                 {
-                    puts("Applying DMPGL patch");
-                    
-                    // these two instructions set the texture resolution
-                    
-                    resptr[0] = 0xFF;
-                    resptr[1] = 0x22;
-                    resptr[2] = 0x81;
-                    resptr[3] = 0x32;
-                    resptr[4] = 0x03;
-                    resptr[5] = 0xE0;
-                    resptr[6] = 0xC0;
-                    resptr[7] = 0x46;
-                    
-                    resptr[8] = 0xA2; // skip one instruction
-                    
-                    // Do not clear the mask here, as extra patches are needed below
-                    //mask &= ~PAT_WIDE;
+                    resptr = memesearch(
+                        // TWL non-MTXscale GPUscale path
+                        (const uint8_t[]){0xC0, 0x23, 0x00, 0x2F},
+                        0, codecptr, codecsize, 4);
+                    if(resptr)
+                    {
+                        puts("Applying DMPGL-GPU patch");
+                        
+                        if(patmask & PAT_WIDE)
+                        {
+                            // these two instructions set the texture resolution
+                            
+                            resptr[0] = 0xC0;
+                            resptr[1] = 0x23;
+                            
+                            resptr[2] = 0xFF;
+                            resptr[3] = 0x22;
+                            resptr[4] = 0x41;
+                            resptr[5] = 0x32;
+                            
+                            resptr[6] = 0x5F;
+                            resptr[7] = 0x00;
+                            
+                            if(patmask & PAT_SQUISH)
+                            {
+                                resptr[6] = 0x9F;
+                                resptr[7] = 0x00;
+                            }
+                            else
+                            {
+                                resptr[8] = 0xC0;
+                                resptr[9] = 0x23;
+                            }
+                            
+                            resptr[12] = 0xA7;
+                            resptr[13] = 0x60;
+                        }
+                        else
+                        {
+                            resptr[0] = 0xC0;
+                            resptr[1] = 0x23;
+                            
+                            resptr[2] = 0xFF;
+                            resptr[3] = 0x22;
+                            resptr[4] = 0x41;
+                            resptr[5] = 0x32;
+                            
+                            resptr[6] = 0x5F;
+                            resptr[7] = 0x00;
+                            
+                            if(patmask & PAT_SQUISH)
+                            {
+                                resptr[6] = 0x9F;
+                                resptr[7] = 0x00;
+                            }
+                            else
+                            {
+                                resptr[8] = 0xC0;
+                                resptr[9] = 0x23;
+                            }
+                            
+                            resptr[12] = 0xA7;
+                            resptr[13] = 0x60;
+                        }
+                    }
+                }
+                else
+                {
+                    // == ??? TODO document
+                    resptr = memesearch(
+                        // TWL MTX-scale non-GPUscale path
+                        (const uint8_t[]){0x00, 0x2A, 0x04, 0xD0, 0x23, 0x61, 0xA1, 0x80, 0xA1, 0x60},
+                        0, codecptr, codecsize, 10);
+                    if(resptr)
+                    {
+                        puts("Applying DMPGL-MTX patch");
+                        
+                        // these two instructions set the texture resolution
+                        
+                        resptr[0] = 0xFF;
+                        resptr[1] = 0x22;
+                        resptr[2] = 0x81;
+                        resptr[3] = 0x32;
+                        resptr[4] = 0x03;
+                        resptr[5] = 0xE0;
+                        resptr[6] = 0xC0;
+                        resptr[7] = 0x46;
+                        
+                        resptr[8] = 0xA2; // skip one instruction
+                        
+                        // Do not clear the mask here, as extra patches are needed below
+                        //mask &= ~PAT_WIDE;
+                    }
                 }
             }
             else
@@ -500,8 +572,258 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         }
     }
     
+    if(patmask & PAT_GPUSCALING)
+    {
+        // This is a big fucking middle finger from the cmdlists
+        #if 1
+        resptr = memesearch(
+            (const uint8_t[]){0x05, 0x1B, 0x41, 0xE2, 0xFF, 0x1F, 0x51, 0xE2, 0x00, 0x10, 0x92, 0x05, 0x00, 0x10, 0x80, 0x05},
+            0, codecptr, codecsize, 16);
+        
+        if(resptr)
+        {
+            puts("Applying sharp GPU scaling patch");
+            
+            // LDR r5, [r2]
+            resptr[0x08] = 0x00;
+            resptr[0x09] = 0x50;
+            resptr[0x0A] = 0x92;
+            resptr[0x0B] = 0xE5;
+            
+            // CMP r1, #2
+            resptr[0x0C] = 0x02;
+            resptr[0x0D] = 0x00;
+            resptr[0x0E] = 0x51;
+            resptr[0x0F] = 0xE3;
+            
+            // MOVLT r5, #0x2600
+            resptr[0x10] = 0x26;
+            resptr[0x11] = 0x5C;
+            resptr[0x12] = 0xA0;
+            resptr[0x13] = 0xB3;
+            
+            // ORRLT r5, r5, #0x01
+            resptr[0x14] = 0x01;
+            resptr[0x15] = 0x50;
+            resptr[0x16] = 0x85;
+            resptr[0x17] = 0xB3;
+            
+            // STRLT r5, [r0, #0]
+            resptr[0x18] = 0x00;
+            resptr[0x19] = 0x50;
+            resptr[0x1A] = 0x80;
+            resptr[0x1B] = 0xB5;
+            
+            // STRLT r5, [r0, #4]
+            resptr[0x1C] = 0x04;
+            resptr[0x1D] = 0x50;
+            resptr[0x1E] = 0x80;
+            resptr[0x1F] = 0xB5;
+            
+            // BEQ --> BLT
+            resptr[0x23] |= 0xB0;
+            
+            resptr[0x28] = 0x00;
+            resptr[0x29] = 0xF0;
+            resptr[0x2A] = 0x20;
+            resptr[0x2B] = 0x03;
+            
+            resptr[0x2D] |= 0x40;
+        }
+        #endif
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x00, 0x01, 0x00, 0x02, 0x00, 0x22, 0x00, 0x00},
+            0, codecptr, codecsize, 8);
+        if(resptr)
+        {
+            puts("Patching scaling to linear #1");
+            
+            resptr[4] |= 3;
+            
+            resptr = memesearch(
+                (const uint8_t[]){0x00, 0x01, 0x00, 0x02, 0x00, 0x22, 0x00, 0x00},
+                0, resptr + 8, codecsize - (resptr - codecptr) - 8, 8);
+            if(resptr)
+            {
+                puts("Patching scaling to linear #2");
+                
+                resptr[4] |= 3;
+            }
+        }
+        
+        // upscale enable  - r3 = 0, r2 = 1 - GPU stretch, stride fucked
+        // upscale disable - r3 = 0, r2 = 0 - no stretch, stride fucked
+        
+        resptr = memesearch(
+            // Patch params to twlgraphicsInit(zero, randomptr, bool DisableScaling, bool EnableGPU)
+            !agbg ?
+            //(const uint8_t[]){0x00, 0x23, 0x01, 0x22, 0x10, 0x31, 0x18, 0x46}, // upscaling disabled
+            (const uint8_t[]){0x00, 0x23, 0x1A, 0x46, 0x10, 0x31, 0x18, 0x46}  // upscaling not disabled
+            :
+            (const uint8_t[]){0x00, 0x23, 0x01, 0x20, 0x18, 0x31, 0x1A, 0x46}, // upscaling not disabled
+            0, codecptr, codecsize, 8);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling patch #1");
+            
+            resptr[0] = 1;
+            resptr[1] = 0x23;
+            
+            resptr[2] = 0;
+            resptr[3] = 0x22;
+            
+            resptr[6] = !agbg ? 0 : 1;
+            resptr[7] = 0x20;
+        }
+        
+        resptr = memesearch(
+            // Always keep MTX unscaled
+            !agbg ?
+            (const uint8_t[]){0x20, 0x78, 0x00, 0x28, 0x03, 0xD0, 0x00, 0x21}
+            :
+            (const uint8_t[]){0x00, 0x28, 0x01, 0xD0, 0x00, 0x21, 0x00, 0xE0, 0x02, 0x21},
+            0, codecptr, codecsize, !agbg ? 8 : 10);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling patch #2");
+            
+            if(!agbg)
+            {
+                resptr[5] &= ~0xF;
+                resptr[5] |= 4;
+            }
+            else
+            {
+                resptr[8] = 0;
+            }
+        }
+        
+        /*if(agbg)
+        {
+            resptr = memesearch(
+                (const uint8_t[]){0xFF, 0x22, 0xA1, 0x80, 0x41, 0x32, 0xA3, 0x60, 0xE2, 0x60, 0x20, 0x61, 0xA0, 0x21, 0x70, 0x82},
+                0, codecptr, codecsize, 16);
+            
+            if(resptr)
+            {
+                puts("Applying AGBG DMPGL texture stride patch");
+                
+                resptr[-2] = 0x49;
+                resptr[-1] = 0x00;
+            }
+        }*/
+        
+        uint8_t widepat[4];
+        
+        if(!agbg)
+        {
+            // MOV r1, #256
+            widepat[0] = 0x01;
+            widepat[1] = 0x1C;
+            widepat[2] = 0xA0;
+            widepat[3] = 0xE3;
+        }
+        else
+        {
+            // MOV r1, #240
+            widepat[0] = 0xF0;
+            widepat[1] = 0x10;
+            widepat[2] = 0xA0;
+            widepat[3] = 0xE3;
+        }
+        
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x03, 0x2A, 0x80, 0xED, 0x88, 0x10, 0x94, 0xE5, 0xB4, 0xE8, 0xD4, 0xE1},
+            0, codecptr, codecsize, 12);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling hotfix #1");
+            
+            resptr[4] = widepat[0];
+            resptr[5] = widepat[1];
+            resptr[6] = widepat[2];
+            resptr[7] = widepat[3];
+        }
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x05, 0x2A, 0x80, 0xED, 0x88, 0x10, 0x94, 0xE5, 0xB4, 0xE8, 0xD4, 0xE1},
+            0, codecptr, codecsize, 12);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling hotfix #2");
+            
+            resptr[4] = widepat[0];
+            resptr[5] = widepat[1];
+            resptr[6] = widepat[2];
+            resptr[7] = widepat[3];
+        }
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x03, 0x0A, 0xC0, 0xED, 0x8C, 0x10, 0x94, 0xE5, 0xB4, 0xE8, 0xD4, 0xE1},
+            0, codecptr, codecsize, 12);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling hotfix #3");
+            
+            resptr[4] = widepat[0];
+            resptr[5] = widepat[1];
+            resptr[6] = widepat[2];
+            resptr[7] = widepat[3];
+        }
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x05, 0x1A, 0x80, 0xED, 0x8C, 0x10, 0x94, 0xE5, 0xB4, 0xE8, 0xD4, 0xE1},
+            0, codecptr, codecsize, 12);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling hotfix #4");
+            
+            resptr[4] = widepat[0];
+            resptr[5] = widepat[1];
+            resptr[6] = widepat[2];
+            resptr[7] = widepat[3];
+        }
+        
+        resptr = memesearch(
+            (const uint8_t[]){0x00, 0x00, 0x80, 0x3B},
+            0, codecptr, codecsize, 4);
+        
+        if(resptr)
+        {
+            puts("Applying GPU scaling hotfix #-1");
+            
+            if(!agbg)
+            {
+                resptr[0] = 0xCC;
+                resptr[1] = 0xCC;
+                resptr[2] = 0x4C;
+                resptr[3] = 0x3B;
+            }
+            else
+            {
+                resptr[0] = 0xAA;
+                resptr[1] = 0xAA;
+                resptr[2] = 0x2A;
+                resptr[3] = 0x3B;
+            }
+        }
+        
+        mask &= ~PAT_GPUSCALING;
+        
+        mask &= ~PAT_WIDE;
+        patmask &= ~PAT_WIDE;
+    }
+    
     // ALL of these require hooking
-    if(patmask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM | PAT_WIDE | PAT_RELOC | PAT_DEBUG | PAT_EHANDLER))
+    if(patmask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM | PAT_WIDE | PAT_RELOC | PAT_DEBUG | PAT_GPUSCALING | PAT_EHANDLER))
     {
         // ==[ Alternative code spaces, unused for now ]==
         

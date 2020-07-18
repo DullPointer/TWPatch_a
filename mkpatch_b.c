@@ -15,7 +15,7 @@ size_t lzss_enc2(const void* __restrict in, void* __restrict out, size_t insize,
 
 int main(int argc, char** argv)
 {
-    size_t pat = PAT_HID | PAT_RTCOM;
+    size_t pat = PAT_HID | PAT_RTCOM | PAT_GPUSCALING;
     
     if(argv[1])
     {

@@ -9,6 +9,7 @@
 #define PAT_HID         (1 << 4)
 #define PAT_RTCOM       (1 << 6)
 #define PAT_DEBUG       (1 << 7)
+#define PAT_GPUSCALING  (1 << 8)
 #define PAT_EHANDLER    (1 << 9)
 
 void* memesearch(const void* patptr, const void* bitptr, const void* searchptr, size_t searchlen, size_t patsize);
