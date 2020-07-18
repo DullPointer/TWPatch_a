@@ -363,7 +363,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     
     // === remove opposing DPAD check
     
-    if(mask & PAT_HID)
+    if(patmask & PAT_HID)
     {
         resptr = memesearch(
             // bit stuff for removing opposing DPAD bits
@@ -398,7 +398,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     
     // === DMPGL patch for resolution changing
     
-    if(mask & PAT_WIDE)
+    if(patmask & PAT_WIDE)
     {
         // (const uint8_t[]){0xD2, 0x4C, 0x00, 0x26, 0x00, 0x28}, DMA PATCH
         resptr = memesearch
@@ -470,7 +470,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     }
     
     // ALL of these require hooking
-    if(mask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM | PAT_WIDE | PAT_RELOC | PAT_DEBUG))
+    if(patmask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM | PAT_WIDE | PAT_RELOC | PAT_DEBUG))
     {
         // ==[ Alternative code spaces, unused for now ]==
         
@@ -499,7 +499,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
         }
         
         // Copy runonce blob first, if needed
-        if(addroffs && pat_copyholerunonce(0, 0, mask, 0))
+        if(addroffs && pat_copyholerunonce(0, 0, patmask, 0))
         {
             resptr = memesearch(
                 // Start of the unused(?) MTX driver blob
@@ -569,7 +569,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     copyret[1] = 0; // has to be initialized!
                     
                     // do not clear PAT_RELOC because it's cleared below
-                    mask &= pat_copyholerunonce(resptr, sets, mask & ~PAT_RELOC, copyret) & ~PAT_RELOC;
+                    mask &= pat_copyholerunonce(resptr, sets, patmask & ~PAT_RELOC, copyret) & ~PAT_RELOC;
                     
                     uint32_t sraddr = (res2ptr - codecptr) + addroffs;
                     uint32_t toaddr = (resptr - codecptr) + 0x300000;
@@ -597,7 +597,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
             puts("Can't apply runonce patches due to missing relocation offset");
         }
         
-        if(pat_copyholehook(0, mask, 0))
+        if(addroffs && pat_copyholehook(0, patmask, 0))
         {
             // Frame hook ALWAYS has to be hooked, no matter if rtcom is on,
             //  or if there are any patches present. Either of them always does.
@@ -621,7 +621,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 
                 if(resptr)
                 {
-                    printf("pat2 at %X\n", (resptr - codecptr) + 0x300000);
+                    printf("pat2 at %X\n", (resptr - codecptr) + addroffs);
                     
                     resptr += 0x38; // Skip used function blob
                     
@@ -631,7 +631,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         resptr += 4;
                         if(resptr[1] != 0x48 || !resptr[3])
                         {
-                            printf("Invalid pattern match at %X\n", (resptr - codecptr) + 0x300000);
+                            printf("Invalid pattern match at %X\n", (resptr - codecptr) + addroffs);
                             resptr = 0;
                         }
                     }
@@ -642,7 +642,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
             // Make sure we found the right blob at the very start
             if(resptr && (resptr - codecptr) < 0x20000)
             {
-                printf("Frame hook target %X\n", (resptr - codecptr) + 0x300000);
+                printf("Frame hook target %X\n", (resptr - codecptr) + addroffs);
             
                 if((resptr - codecptr) & 2) //must be 4-aligned for const pools
                 {
@@ -709,7 +709,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     makeblT(&res2ptr, toaddr, sraddr);
                     
                     // rtcom has its own dedicated hole
-                    if(mask & PAT_RTCOM)
+                    if(patmask & PAT_RTCOM)
                     {
                         memcpy(resptr, trainer_bin, trainer_bin_size);
                         
@@ -723,7 +723,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                     
                     uint8_t* mtxblob = 0;
                     
-                    if(pat_copyholehook(0, mask & ~PAT_RTCOM, 0))
+                    if(pat_copyholehook(0, patmask & ~PAT_RTCOM, 0))
                     {
                         do
                         {
