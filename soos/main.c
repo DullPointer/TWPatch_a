@@ -1,6 +1,6 @@
 /*
     LgyPatPat - TwlBg Matrix hardware matrix patcher
-    Copyright (C) 2019 Sono (https://github.com/SonoSooS)
+    Copyright (C) 2019-2020 Sono (https://github.com/SonoSooS)
     All Rights Reserved
 */
 
