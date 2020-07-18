@@ -12,12 +12,14 @@ typedef uint32_t u32;
 #include "agb_wide_bin.h"
 #include "twl_wide_bin.h"
 #include "trainer_bin.h"
+#include "ehandler_bin.h"
+#include "ehook_bin.h"
 
 //#define MEME_DEBUG
 
 // only used for percentage display
 const size_t PAT_HOLE_SIZE = 0x1E0; // run-once
-const size_t HOK_HOLE_SIZE = 0x0F8; // frame trainers
+const size_t HOK_HOLE_SIZE = 0x06C; // frame trainers
 const size_t RTC_HOLE_SIZE = 0x130; // rtcom
 
 const size_t PAT_HOLE_ADDR = 0x130000 - 0x100; // not used for actual payload positioning
@@ -96,7 +98,7 @@ __attribute__((optimize("Ofast"))) void* memesearch(const void* patptr, const vo
 size_t pat_copyholerunonce(uint8_t* patchbuf, const color_setting_t* sets, size_t mask, size_t* outsize)
 {
     if(!patchbuf)
-        return mask & (PAT_REDSHIFT | PAT_WIDE | PAT_RELOC);
+        return mask & (PAT_REDSHIFT | PAT_WIDE | PAT_RELOC | PAT_EHANDLER);
     
     uint16_t* tptr = (uint16_t*)patchbuf;
     
@@ -220,6 +222,19 @@ size_t pat_copyholerunonce(uint8_t* patchbuf, const color_setting_t* sets, size_
             outsize[1] = (size_t)((((uint8_t*)tptr - patchbuf) + 3) & ~3);
     }
     
+    if(mask & PAT_EHANDLER)
+    {
+        puts("Reinstalling error handler");
+        
+        memcpy(tptr, ehandler_bin, ehandler_bin_size);
+        tptr += (ehandler_bin_size + 1) >> 1;
+        
+        if(((uint8_t*)tptr - patchbuf) & 2)
+            *(tptr++) = 0x46C0; //NOP
+        
+        mask &= ~PAT_EHANDLER;
+    }
+    
     *(tptr++) = 0x4770; // BX LR
     *(tptr++) = 0x4770; // BX LR
     
@@ -247,9 +262,23 @@ size_t pat_copyholerunonce(uint8_t* patchbuf, const color_setting_t* sets, size_
 size_t pat_copyholehook(uint8_t* patchbuf, size_t mask, size_t* outsize)
 {
     if(!patchbuf)
-        return mask & (PAT_HOLE | PAT_RTCOM);
+        return mask & (PAT_HOLE | PAT_RTCOM | PAT_EHANDLER);
     
     uint16_t* tptr = (uint16_t*)patchbuf;
+    
+    if(mask & PAT_EHANDLER)
+    {
+        puts("Installing dummy error handler");
+        
+        memcpy(tptr, ehook_bin, ehook_bin_size);
+        tptr += (ehook_bin_size + 1) >> 1;
+        
+        if(((uint8_t*)tptr - patchbuf) & 2)
+            *(tptr++) = 0x46C0; //NOP
+        
+        
+        mask &= ~PAT_EHANDLER;
+    }
     
     if(mask & PAT_HOLE)
     {
@@ -258,6 +287,8 @@ size_t pat_copyholehook(uint8_t* patchbuf, size_t mask, size_t* outsize)
         
         if(((uint8_t*)tptr - patchbuf) & 2)
             *(tptr++) = 0x46C0; //NOP
+        
+        mask &= ~PAT_HOLE;
     }
     
     if(mask & PAT_RTCOM)
@@ -470,7 +501,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
     }
     
     // ALL of these require hooking
-    if(patmask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM | PAT_WIDE | PAT_RELOC | PAT_DEBUG))
+    if(patmask & (PAT_HOLE | PAT_REDSHIFT | PAT_RTCOM | PAT_WIDE | PAT_RELOC | PAT_DEBUG | PAT_EHANDLER))
     {
         // ==[ Alternative code spaces, unused for now ]==
         
