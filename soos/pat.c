@@ -443,10 +443,10 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
             0, codecptr, codecsize, 6);
         if(resptr)
         {
-            puts("Applying wide patch");
-            
-            // these values below change the TEXTURE resolution, not the rendering resolution
-            // DO NOT CHANGE
+            //TODO: experiment with the below two things
+            // these values below change the letterbox size
+			
+			puts("Applying wide patch");
             
             if(!agbg)
                 resptr[2] += (384 - 320); //lol
@@ -463,7 +463,7 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                 {
                     puts("Applying DMPGL patch");
                     
-                    // these two instructions set the RENDERING resolution
+                    // these two instructions set the texture resolution
                     
                     resptr[0] = 0xFF;
                     resptr[1] = 0x22;
@@ -752,10 +752,14 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         mask &= ~PAT_RTCOM;
                     }
                     
-                    uint8_t* mtxblob = 0;
+                    uint8_t* mtxblob = resptr;
+                    
+                    if(patmask & PAT_RTCOM)
+                        mtxblob = 0;
                     
                     if(pat_copyholehook(0, patmask & ~PAT_RTCOM, 0))
                     {
+                        if(!mtxblob)
                         do
                         {
                             //10189C - 1018C4 - 319C0C
@@ -782,28 +786,32 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                             }
                             
                             puts("Hooking rtcom --> extrapatches");
+                            printf("%X --> %X\n", resptr - codecptr + addroffs, mtxblob - codecptr + addroffs);
                             
-                            mask &= pat_copyholehook(mtxblob, mask, 0);
+                            mask &= pat_copyholehook(mtxblob, patmask & ~PAT_RTCOM, 0);
                             
-                            // PUSH {r0, LR}
-                            *(resptr++) = 0x01;
-                            *(resptr++) = 0xB5;
-                            // NOP
-                            *(resptr++) = 0xC0;
-                            *(resptr++) = 0x46;
-                            
-                            sraddr = (resptr - codecptr) + addroffs;
-                            toaddr = (mtxblob - codecptr) + addroffs;
-                            
-                            // BL rtcom_end --> extrablob
-                            makeblT(&resptr, toaddr, sraddr);
-                            
-                            // NOP
-                            *(resptr++) = 0xC0;
-                            *(resptr++) = 0x46;
-                            // POP {r0, PC}
-                            *(resptr++) = 0x01;
-                            *(resptr++) = 0xBD;
+                            if(patmask & PAT_RTCOM)
+                            {
+                                // PUSH {r0, LR}
+                                *(resptr++) = 0x01;
+                                *(resptr++) = 0xB5;
+                                // NOP
+                                *(resptr++) = 0xC0;
+                                *(resptr++) = 0x46;
+                                
+                                sraddr = (resptr - codecptr) + addroffs;
+                                toaddr = (mtxblob - codecptr) + addroffs;
+                                
+                                // BL rtcom_end --> extrablob
+                                makeblT(&resptr, toaddr, sraddr);
+                                
+                                // POP {r0, r1}
+                                *(resptr++) = 0x03;
+                                *(resptr++) = 0xBC;
+                                // BX r1
+                                *(resptr++) = 0x08;
+                                *(resptr++) = 0x47;
+                            }
                             
                             // ==[ DO NOT USE ]==
                             /*resptr = memesearch(
@@ -830,11 +838,14 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
                         }
                     }
                     
-                    // BX LR; BX LR;
-                    *(resptr++) = 0x70;
-                    *(resptr++) = 0x47;
-                    *(resptr++) = 0x70;
-                    *(resptr++) = 0x47;
+                    if(patmask & PAT_RTCOM)
+                    {
+                        // BX LR; BX LR;
+                        *(resptr++) = 0x70;
+                        *(resptr++) = 0x47;
+                        *(resptr++) = 0x70;
+                        *(resptr++) = 0x47;
+                    }
                 }
                 else
                 {
@@ -845,6 +856,10 @@ size_t pat_apply(uint8_t* codecptr, size_t codecsize, const color_setting_t* set
             {
                 puts("Can't find unused init blob");
             }
+        }
+        else if(!addroffs)
+        {
+            puts("Can't apply frame hook due to missing relocation offset");
         }
     }
     

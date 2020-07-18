@@ -4,11 +4,14 @@
 
 .align 4
 
+;flag_colorfill equ 1
+
 latch_data equ 4
 latch_stat equ 8
 latch_all  equ 12
 
 gpio_rtc   equ (0xEB00000 + 0x10147100)
+colorfill_top   equ 0x1ED02204
 
 payload_addr equ 0x201000
 
@@ -72,6 +75,16 @@ rtcom_restart:
     
     LSR r1, #8
     BEQ rtcom_done ; status == 00h
+    
+  .ifdef flag_colorfill
+    LDR r2, =colorfill_top
+    MOV r1, #1
+    LSL r1, #24
+    ORR r1, r3
+    STR r1, [r2]
+  .endif
+    
+    LSR r1, r3, #8
     
     ADD r0, PC, #(rtcom_state - . - 2) & ~3
     
@@ -183,9 +196,20 @@ rtcom_state:
 .align 4
 rtcom_done:
 
+.ifdef flag_colorfill
+  LDR r2, =colorfill_top
+  MOV r1, #0
+  STR r1, [r2]
+  MOV r1, r1
+.endif
+
 MOV r8, r6
 MOV LR, r7
 POP {r0 - r7}
 
-BX LR
+B endpool
+.pool
+
+.align 4
+endpool:
 .close
