@@ -12,12 +12,12 @@ B already_inited
 .align 4
 
 .func draw_hex ; r0 fb, r1 val
-    .include "../fontest.S"
-    ;.include "../fontest_fontable.S"
+    ;.include "../fontest.S"
+    .include "../fontest_fontable.S"
 
 .align 4
 fonttable:
-    /*
+    
     .db 0b00000000,0b00111110,0b01111111,0b01001101,0b01011001,0b01111111,0b00111110,0b00000000
     .db 0b00000000,0b00010000,0b00110000,0b01111111,0b01111111,0b00000000,0b00000000,0b00000000
     .db 0b00000000,0b00100001,0b01100011,0b01000111,0b01001101,0b01111001,0b00110001,0b00000000
@@ -34,7 +34,7 @@ fonttable:
     .db 0b00000000,0b01111111,0b01111111,0b01000001,0b01100011,0b00111110,0b00011100,0b00000000
     .db 0b00000000,0b01111111,0b01111111,0b01001001,0b01001001,0b01000001,0b01000001,0b00000000
     .db 0b00000000,0b01111111,0b01111111,0b01001000,0b01001000,0b01000000,0b01000000,0b00000000
-    */
+    
     
     .pool
     
@@ -122,7 +122,7 @@ print_again:
 LDR r1, [r4, r5]
 BL draw_hex
 ADD r5, #4
-CMP r5, #(4 * 5)
+CMP r5, #(4 * 16)
 BNE print_again
 
 
@@ -153,7 +153,11 @@ B payload_end
 
 initflag:
     .word 0
-    .word 0xEB00000 + 0x10147100;0x1EC41100 ;0x12F000 ;0x1FFB6800 - 0x1FF84800 + 0x100000
+    ;.word 0xEB00000 + 0x10147100;0x1EC41100 ;0x12F000 ;0x1FFB6800 - 0x1FF84800 + 0x100000
+    ;.word 0x1273AC
+    ;.word 0x129EE8 + (4 * 32)
+    .word 0x1ED01000
 
+.align 4
 payload_end:
 .close

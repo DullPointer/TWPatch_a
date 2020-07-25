@@ -111,7 +111,8 @@ static void* LoadSection0(size_t* outsize)
         memcpy(ret, buf, 0x200);
         
         // name always seems to be located at pNCCH + 1
-        if(fread(buf, 0x200, 1, f) != 1 || *(const uint64_t*)buf != *(const uint64_t*)"TwlBg\0\0")
+        //if(fread(buf, 0x200, 1, f) != 1 || *(const uint64_t*)buf != *(const uint64_t*)"TwlBg\0\0")
+        if(fread(buf, 0x200, 1, f) != 1 || ((*(const uint64_t*)buf ^ *(const uint64_t*)"TwlBg\0\0") & ~0xE1015))
         {
             puts("/luma/section0.bin is not TwlBg");
             fclose(f);

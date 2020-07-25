@@ -1,6 +1,6 @@
 /*
     LgyPatPat - TwlBg Matrix hardware matrix patcher
-    Copyright (C) 2019 Sono (https://github.com/SonoSooS)
+    Copyright (C) 2019-2020 Sono (https://github.com/SonoSooS)
     All Rights Reserved
 */
 
@@ -41,6 +41,9 @@ static const uint16_t* textfb = 0;
 static struct krn_kernel kernel;
 
 static uint32_t currscreen = 0;
+
+static color_setting_t redset;
+static int curred = 0;
 
 static __attribute__((optimize("Ofast"))) void DoOverlay()
 {
@@ -193,6 +196,105 @@ static __attribute__((optimize("Ofast"))) void DoOverlay()
     redrawfb = 0;
 }
 
+static void WriteAll(const u32* dst, int screen)
+{
+    u32 reg = screen & 1 ? 0x400580 : 0x400480;
+    
+    u8 idx = 0;
+    do
+    {
+        u32 pos = idx;
+        GSPGPU_WriteHWRegs(reg + 0, &pos, 4);
+        GSPGPU_WriteHWRegs(reg + 4, dst++, 4);
+    }
+    while(++idx);
+}
+
+static void ApplyCS(color_setting_t* cs, int screen)
+{
+    u8 i = 0;
+    
+    struct
+    {
+        u8 r;
+        u8 g;
+        u8 b;
+        u8 z;
+    } px[256];
+    
+    do
+    {
+        *(u32*)&px[i] = i | (i << 8) | (i << 16);
+    }
+    while(++i);
+    
+    if(cs)
+    {
+        u16 c[256 * 3];
+        do
+        {
+            *(c + i + 0x000) = px[i].r | (px[i].r << 8);
+            *(c + i + 0x100) = px[i].g | (px[i].g << 8);
+            *(c + i + 0x200) = px[i].b | (px[i].b << 8);
+        }
+        while(++i);
+        
+        colorramp_fill(c + 0x000, c + 0x100, c + 0x200, 256, cs);
+        
+        do
+        {
+            px[i].r = *(c + i + 0x000) >> 8;
+            px[i].g = *(c + i + 0x100) >> 8;
+            px[i].b = *(c + i + 0x200) >> 8;
+        }
+        while(++i);
+    }
+    
+    if(screen & 1)
+        WriteAll((u32*)px, 0);
+    if(screen & 2)
+        WriteAll((u32*)px, 1);
+}
+
+static struct
+{
+    size_t mask;
+    const char* label;
+} patlist[] =
+{
+    {PAT_UNSTART, "Un-START"},
+    {PAT_REDSHIFT, "Redshift"},
+    {PAT_WIDE, "DMPGL Wide test 384x240 16:10"},
+    {PAT_GPUSCALING, "GPU scale test (health hazard!)"},
+    {PAT_EHANDLER, "Install exception handler"},
+    {PAT_HID, "Anti-DPAD"},
+    {PAT_HOLE, "Hole (obsolete)"},
+    {PAT_DEBUG, "???"},
+    //{PAT_HOLE | PAT_HID | PAT_UNSTART | PAT_GPUSCALING | (1 << 30), "Ktest"},
+    {(1 << 31) | PAT_RTCOM, "rtcom"},
+    {(1 << 31) | PAT_ANTIWEAR, "Anti-wear"},
+    {1 << 30, "* No default patches"},
+    {0, 0},
+    {PAT_UNSTART, "Un-START"},
+    {PAT_REDSHIFT, "Redshift"},
+    {PAT_WIDE, "DMPGL Wide test 400x240 15:9"},
+    {PAT_GPUSCALING, "GPU scale test (health hazard!)"},
+    {PAT_EHANDLER, "Install exception handler"},
+    {PAT_HID, "Anti-DPAD"},
+    {PAT_HOLE, "Hole (obsolete)"},
+    {PAT_DEBUG, "???"},
+    //{PAT_GPUSCALING | PAT_EHANDLER | PAT_UNSTART | PAT_HID | (1 << 30), "BetterAGB debug"},
+    {(1 << 31) | PAT_RTCOM, "rtcom"},
+    {(1 << 31) | PAT_ANTIWEAR, "Anti-wear"},
+    {1 << 30, "* No default patches"},
+    {0, 0}
+};
+
+static size_t currpat = 0;
+static size_t patmask = 0;
+
+size_t lzss_enc2(const void* __restrict in, void* __restrict out, size_t insize, size_t outsize);
+
 int main()
 {
     gfxInit(GSP_RGBA8_OES, GSP_RGBA8_OES, false);
@@ -219,10 +321,20 @@ int main()
     hidScanInput();
     agbg = (hidKeysHeld() & KEY_Y) ? 1 : 0;
     
+    currentscale = 8;
+    
     if(agbg)
-        currentscale = 17;
-    else
-        currentscale = 7;
+    {
+        while(scalelist1[currentscale++].ptr)
+            ;
+        
+        currentscale += 0;
+        
+        while(patlist[currpat++].label)
+            ;
+        
+        currpat += 0;
+    }
     
     u32 kDown = 0;
     u32 kHeld = 0;
@@ -329,6 +441,16 @@ int main()
     
     krn_cvt(&kernel, scalelist1[currentscale].ptr, 5, 15);
     
+    memset(&redset, 0, sizeof(redset));
+    redset.temperature = 3200;
+    redset.gamma[0] = 1.0F;
+    redset.gamma[1] = 1.0F;
+    redset.gamma[2] = 1.0F;
+    redset.brightness = 1.0F;
+    
+    color_setting_t colorset;
+    memcpy(&colorset, &redset, sizeof(colorset));
+    
     while(aptMainLoop())
     {
         hidScanInput();
@@ -355,7 +477,7 @@ int main()
                 gfxFlushBuffers();
                 gspWaitForVBlank();
                 
-                size_t mask = PAT_HID | PAT_RTCOM;
+                size_t mask = (patmask & (1 << 30)) ? (patmask & 0xFFFF) : (PAT_HID | PAT_RTCOM | PAT_ANTIWEAR | patmask);
                 if(kHeld & KEY_X)
                 {
                     puts("Widescreen patches enabled!\n");
@@ -367,6 +489,33 @@ int main()
                     puts(" lead to instability\n");
                     mask &= ~PAT_RTCOM;
                 }
+                
+                puts("\nEnabled patches:");
+                
+                if(mask & PAT_REDSHIFT)
+                    puts("- CTR_Redshift");
+                if(mask & PAT_HOLE)
+                    puts("- Debug trainer");
+                if(mask & PAT_RELOC)
+                    puts("- <null>");
+                if(mask & PAT_WIDE)
+                    puts("- DMPGL");
+                if(mask & PAT_HID)
+                    puts("- DPAD LR patch");
+                if(mask & PAT_UNSTART)
+                    puts("- Un-START");
+                if(mask & PAT_RTCOM)
+                    puts("- rtcom");
+                if(mask & PAT_DEBUG)
+                    puts("- ???");
+                if(mask & PAT_GPUSCALING)
+                    puts("- ScaleTest");
+                if(mask & PAT_EHANDLER)
+                    puts("- kAXI EHANDLER kTLS");
+                if(mask & PAT_SQUISH)
+                    puts("- ScanDouble (SQUISH)");
+                if(mask & PAT_ANTIWEAR)
+                    puts("- antiwear");
                 
                 puts("\nDoing patches\n");
                 
@@ -388,22 +537,21 @@ int main()
                     }
                 }
                 
-                color_setting_t settest;
-                settest.temperature = 3200;
-                settest.gamma[0] = 1.0F;
-                settest.gamma[1] = 1.0F;
-                settest.gamma[2] = 1.0F;
-                settest.brightness = 1.0F;
-                pat_apply(codecptr, codecsize, &settest, mask);
+                pat_apply(codecptr, codecsize, &redset, mask);
                 
                 puts("Compressing... this will take a year or two");
                 
                 size_t outsize = ((*codesizeptr) + 0x1FF) & ~0x1FF;
                 *codesizeptr = outsize;
                 
-                size_t lzres = (kHeld & KEY_R) ? ~0 : lzss_enc(codecptr, codeptr, codecsize, outsize);
+                u64 start = svcGetSystemTick();
+                
+                size_t lzres = (kHeld & KEY_R) ? ~0 : lzss_enc2(codecptr, codeptr, codecsize, outsize);
                 if(~lzres)
                 {
+                    start = ((svcGetSystemTick() - start) >> 4) / 16756991;
+                    printf("Took %llum%llus\n", start / 60, start % 60);
+                    
                     puts("Writing file to disk");
                     mkdir("/luma", 0777);
                     mkdir("/luma/sysmodules", 0777);
@@ -475,10 +623,149 @@ int main()
                         krn_cvt(&kernel, scalelist1[currentscale].ptr, 6, 27);
                 }
             }
+            
+            if((kHeld & KEY_Y) && (kDown & (KEY_Y | KEY_B)) == KEY_B)
+            {
+                currscreen = 2;
+                consoleClear();
+            }
+        }
+        else if(currscreen == 1)
+        {
+            if(kDown & KEY_X)
+            {
+                memset(&redset, 0, sizeof(redset));
+                redset.temperature = 6500;
+                redset.gamma[0] = 1.0F;
+                redset.gamma[1] = 1.0F;
+                redset.gamma[2] = 1.0F;
+                redset.brightness = 1.0F;
+                
+                ApplyCS(0, 3);
+            }
+            
+            if((((kDown & KEY_RIGHT) ? 1 : 0) ^ ((kDown & KEY_LEFT) ? 1 : 0)))
+            {
+                if(!curred)
+                {
+                    if(kDown & KEY_RIGHT)
+                        redset.temperature += (kHeld & (KEY_L | KEY_R)) ? 1 : 100;
+                    else
+                        redset.temperature -= (kHeld & (KEY_L | KEY_R)) ? 1 : 100;
+                }
+                else
+                {
+                    float* f = 0;
+                    if(!(curred >> 2))
+                        f = &redset.gamma[curred - 1];
+                    
+                    if(!(curred ^ 4))
+                        f = &redset.brightness;
+                    
+                    if(f)
+                    {
+                        if(kDown & KEY_RIGHT)
+                            *f += (kHeld & (KEY_L | KEY_R)) ? 0.01F : 0.1F;
+                        else
+                            *f -= (kHeld & (KEY_L | KEY_R)) ? 0.01F : 0.1F;
+                    }
+                }
+                
+                if(redset.temperature < 1000)
+                    redset.temperature = 1000;
+                if(redset.temperature > 25100)
+                    redset.temperature = 25100;
+                
+                if(redset.gamma[0] < 0.01F)
+                    redset.gamma[0] = 0.01F;
+                if(redset.gamma[1] < 0.01F)
+                    redset.gamma[1] = 0.01F;
+                if(redset.gamma[2] < 0.01F)
+                    redset.gamma[2] = 0.01F;
+                
+                if(redset.gamma[0] > 256.0F)
+                    redset.gamma[0] = 256.0F;
+                if(redset.gamma[1] > 256.0F)
+                    redset.gamma[1] = 256.0F;
+                if(redset.gamma[2] > 256.0F)
+                    redset.gamma[2] = 256.0F;
+                
+                if(redset.brightness < 0.01F) redset.brightness = 0.01F;
+                if(redset.brightness > 1.0F) redset.brightness = 1.0F;
+                
+                ApplyCS(&redset, 3);
+            }
+            
+            if(kDown & KEY_DOWN)
+            {
+                if(++curred > 4)
+                    curred = 4;
+            }
+            
+            if(kDown & KEY_UP)
+            {
+                if(--curred < 0)
+                    curred = 0;
+            }
+            
+            if(kDown & KEY_B)
+            {
+                currscreen = 0;
+                consoleClear();
+                
+                ApplyCS(0, 3);
+            }
+        }
+        else if(currscreen == 2)
+        {
+            if(kDown & KEY_A)
+            {
+                if
+                (
+                    ((patmask & (1 << 30)) || !(patlist[currpat].mask & (1 << 31)))
+                    &&
+                    (patlist[currpat].mask & patmask)
+                )
+                    patmask &= ~patlist[currpat].mask;
+                else
+                    patmask |= patlist[currpat].mask & ~(1 << 31);
+            }
+            
+            if(kDown & KEY_DOWN)
+            {
+                if(!patlist[++currpat].label)
+                {
+                    while(patlist[--currpat - 1].label)
+                        /**/;
+                }
+            }
+            
+            if(kDown & KEY_UP)
+            {
+                if(!patlist[--currpat].label)
+                {
+                    while(patlist[++currpat + 1].label)
+                        /**/;
+                }
+            }
+            
+            if(kDown & KEY_B)
+            {
+                if(kHeld & KEY_Y)
+                {
+                    currscreen = 1;
+                    ApplyCS(&redset, 3);
+                }
+                else
+                    currscreen = 0;
+                
+                consoleClear();
+            }
         }
         else
         {
             currscreen = 0;
+            consoleClear();
         }
         
         if(kDown & KEY_X)
@@ -540,13 +827,18 @@ int main()
             }
             while(0);
             
-            puts("\nHold X to see the original pattern");
-            puts("\n  The UI is very slow, so hold the");
-            puts("    button for at least 1 second!");
+            puts("\n Hold X to see the original pattern");
+            
+            //puts("\n  The UI is very slow, so hold the");
+            //puts("    button for at least 1 second!");
+            
+            puts("\n Hold Y + B to access the patch menu");
+            
             puts("\n Hold START to save and exit");
             puts("      + X to enable widescreen");
-            //puts("      + Y to disable rtcom");
-            puts("\n Hold SELECT to just exit");
+            puts("      + Y to disable rtcom");
+            
+            puts("\n Hold SELECT to exit");
             
             if(kDown & KEY_START)
             {
@@ -559,6 +851,53 @@ int main()
                     puts("Compression takes forever\e[K");
                 while(--iter);
             }
+        }
+        else if(currscreen == 1)
+        {
+            puts("CTRTWL_Redshift v0.0 control panel");
+            
+            printf("\n%c Colortemp: %iK\n\n", (curred == 0 ? '>' : ' '), redset.temperature);
+            
+            printf("%c Gamma[R]: %.2f\n", (curred == 1 ? '>' : ' '), redset.gamma[0]);
+            printf("%c Gamma[G]: %.2f\n", (curred == 2 ? '>' : ' '), redset.gamma[1]);
+            printf("%c Gamma[B]: %.2f\n", (curred == 3 ? '>' : ' '), redset.gamma[2]);
+            
+            printf("\n%c Brightness: %.2f\n\n", (curred == 4 ? '>' : ' '), redset.brightness);
+        }
+        else if(currscreen == 2)
+        {
+            puts("Patches\n");
+            
+            do
+            {
+                size_t iter = 0;
+                
+                if(agbg)
+                {
+                    while(patlist[iter++].label)
+                        /**/;
+                }
+                
+                do
+                {
+                    printf("%c - %c %s\n",
+                        iter == currpat ? '>' : ' ',
+                        (!(patmask & (1 << 30)) && (patlist[iter].mask & (1 << 31)))
+                        ||
+                        (patlist[iter].mask & patmask) == (patlist[iter].mask & ~(1 << 31))
+                        ? 'x'
+                        : !((patlist[iter].mask & patmask) & ~(1 << 31)) ? '.' : '?',
+                        patlist[iter].label);
+                    ++iter;
+                }
+                while(patlist[iter].label);
+            }
+            while(0);
+            
+            puts("\n Press A to toggle selected patch");
+            puts("\n Press B to go back");
+            if(patmask & PAT_REDSHIFT)
+                puts("\n Hold Y + B to open CTR_Redshift configurator");
         }
         else
         {
